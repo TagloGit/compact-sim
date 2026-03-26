@@ -1,7 +1,7 @@
 import {
   ResponsiveContainer,
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -16,17 +16,25 @@ interface CacheHitRateProps {
 }
 
 export function CacheHitRate({ snapshots, currentStep }: CacheHitRateProps) {
-  const data = snapshots.map((s) => ({
-    step: s.stepIndex,
-    hitRate: Math.round(s.cache.hitRate * 100),
-    compaction: s.compactionEvent,
-  }))
+  // Only show LLM call steps (assistant/reasoning) — other steps have no
+  // cache calculation and would show misleading 0% values.
+  const data = snapshots
+    .filter((s) => s.message.type === 'assistant' || s.message.type === 'reasoning')
+    .map((s) => ({
+      step: s.stepIndex,
+      hitRate: Math.round(s.cache.hitRate * 100),
+    }))
 
   return (
     <div className="rounded-lg border border-border bg-card p-4">
-      <h3 className="mb-3 text-sm font-medium">Cache Hit Rate</h3>
+      <h3 className="mb-3 text-sm font-medium">
+        Cache Hit Rate
+        <span className="ml-2 text-xs font-normal text-muted-foreground">
+          LLM call steps only
+        </span>
+      </h3>
       <ResponsiveContainer width="100%" height={240}>
-        <BarChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
+        <LineChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis
             dataKey="step"
@@ -56,12 +64,15 @@ export function CacheHitRate({ snapshots, currentStep }: CacheHitRateProps) {
             strokeDasharray="3 3"
             strokeWidth={1.5}
           />
-          <Bar
+          <Line
+            type="monotone"
             dataKey="hitRate"
-            fill="#3b82f6"
-            radius={[1, 1, 0, 0]}
+            stroke="#3b82f6"
+            strokeWidth={1.5}
+            dot={false}
+            activeDot={{ r: 3 }}
           />
-        </BarChart>
+        </LineChart>
       </ResponsiveContainer>
     </div>
   )
