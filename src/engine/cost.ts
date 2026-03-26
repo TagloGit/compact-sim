@@ -24,6 +24,8 @@ export const ZERO_COST: StepCost = {
   output: 0,
   compactionInput: 0,
   compactionOutput: 0,
+  retrievalInput: 0,
+  retrievalOutput: 0,
   total: 0,
 }
 
@@ -69,6 +71,8 @@ export const defaultCostCalculator: CostCalculator = {
       output,
       compactionInput,
       compactionOutput,
+      retrievalInput: 0,
+      retrievalOutput: 0,
       total,
     }
   },
@@ -93,6 +97,8 @@ export function addCosts(a: StepCost, b: StepCost): StepCost {
     output: a.output + b.output,
     compactionInput: a.compactionInput + b.compactionInput,
     compactionOutput: a.compactionOutput + b.compactionOutput,
+    retrievalInput: a.retrievalInput + b.retrievalInput,
+    retrievalOutput: a.retrievalOutput + b.retrievalOutput,
     total: a.total + b.total,
   }
 }

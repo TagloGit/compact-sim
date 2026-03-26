@@ -25,7 +25,9 @@ function makeState(overrides?: Partial<StepState>): StepState {
     summaryCounter: 0,
     cumulativeCost: ZERO_COST,
     peakContextSize: 0,
+    rng: () => 0.5,
     compactionEvent: false,
+    retrievalEvent: false,
     tokensCompacted: 0,
     summaryTokens: 0,
     cache: ZERO_CACHE,
@@ -184,10 +186,27 @@ describe('pipeline stages', () => {
   })
 
   describe('updateExternalStore', () => {
-    it('is a no-op (returns same state)', () => {
+    it('is a no-op when no compaction event', () => {
       const state = makeState()
       const next = updateExternalStore(state)
       expect(next).toBe(state)
+    })
+
+    it('stores compacted messages in external store when compaction fires', () => {
+      const state = makeState({
+        compactionEvent: true,
+        conversation: [
+          makeMessage('m1', 'system', 1000),
+          { ...makeMessage('m2', 'user', 5000), compacted: true, compactedInto: 'summary-1' },
+          { ...makeMessage('m3', 'assistant', 5000), compacted: true, compactedInto: 'summary-1' },
+          makeMessage('summary-1', 'summary', 500),
+        ],
+      })
+      const next = updateExternalStore(state)
+      expect(next.externalStore.entries).toHaveLength(1)
+      expect(next.externalStore.entries[0].originalMessageIds).toEqual(['m2', 'm3'])
+      expect(next.externalStore.entries[0].tokens).toBe(10000)
+      expect(next.externalStore.totalTokens).toBe(10000)
     })
   })
 
@@ -224,9 +243,51 @@ describe('pipeline stages', () => {
   })
 
   describe('rollRetrieval', () => {
-    it('is a no-op (returns same state)', () => {
-      const state = makeState()
-      const next = rollRetrieval(state)
+    it('is a no-op when external store is empty', () => {
+      const state = makeState({ compressedTokens: 50_000 })
+      const msg = makeMessage('m1', 'assistant', 300)
+      const next = rollRetrieval(state, msg, config)
+      expect(next).toBe(state)
+    })
+
+    it('is a no-op for non-LLM steps', () => {
+      const state = makeState({
+        externalStore: {
+          entries: [{ id: 'ext-1', originalMessageIds: ['m1'], tokens: 1000, level: 0 }],
+          totalTokens: 1000,
+        },
+        compressedTokens: 50_000,
+      })
+      const msg = makeMessage('m1', 'tool_result', 500)
+      const next = rollRetrieval(state, msg, config)
+      expect(next).toBe(state)
+    })
+
+    it('fires retrieval when roll is below probability', () => {
+      const state = makeState({
+        rng: () => 0.01, // always low
+        externalStore: {
+          entries: [{ id: 'ext-1', originalMessageIds: ['m1'], tokens: 1000, level: 0 }],
+          totalTokens: 1000,
+        },
+        compressedTokens: 100_000,
+      })
+      const msg = makeMessage('m1', 'assistant', 300)
+      const next = rollRetrieval(state, msg, config)
+      expect(next.retrievalEvent).toBe(true)
+    })
+
+    it('does not fire when roll exceeds probability', () => {
+      const state = makeState({
+        rng: () => 0.99, // always high
+        externalStore: {
+          entries: [{ id: 'ext-1', originalMessageIds: ['m1'], tokens: 1000, level: 0 }],
+          totalTokens: 1000,
+        },
+        compressedTokens: 100_000,
+      })
+      const msg = makeMessage('m1', 'assistant', 300)
+      const next = rollRetrieval(state, msg, config)
       expect(next).toBe(state)
     })
   })

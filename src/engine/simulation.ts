@@ -3,6 +3,7 @@ import type {
   CacheState,
   ContextState,
   ExternalStore,
+  ExternalStoreEntry,
   Message,
   SimulationConfig,
   SimulationResult,
@@ -14,6 +15,12 @@ import { generateConversation } from './conversation'
 import { getStrategy } from './strategy'
 import { prefixCacheModel, ZERO_CACHE } from './cache'
 import { defaultCostCalculator, ZERO_COST, addCosts } from './cost'
+import {
+  createRng,
+  retrievalProbability,
+  retrievalCost,
+  type Rng,
+} from './retrieval'
 
 // ---------------------------------------------------------------------------
 // StepState — immutable state threaded through the pipeline
@@ -28,8 +35,10 @@ export interface StepState {
   readonly summaryCounter: number
   readonly cumulativeCost: StepCost
   readonly peakContextSize: number
+  readonly rng: Rng
   // Per-step transient fields (reset each iteration)
   readonly compactionEvent: boolean
+  readonly retrievalEvent: boolean
   readonly tokensCompacted: number
   readonly summaryTokens: number
   readonly cache: CacheState
@@ -73,6 +82,7 @@ export function ingestMessage(
     conversation: [...state.conversation, message],
     // Reset per-step transient fields
     compactionEvent: false,
+    retrievalEvent: false,
     tokensCompacted: 0,
     summaryTokens: 0,
     cache: ZERO_CACHE,
@@ -173,11 +183,40 @@ export function evaluateCompaction(
 }
 
 // ---------------------------------------------------------------------------
-// Pipeline stage 4: updateExternalStore (no-op placeholder for V3)
+// Pipeline stage 4: updateExternalStore
 // ---------------------------------------------------------------------------
 
+/**
+ * When compaction fires, store the compacted messages in the external store.
+ * This is a no-op when no compaction event occurred this step.
+ */
 export function updateExternalStore(state: StepState): StepState {
-  return state
+  if (!state.compactionEvent) return state
+
+  // Find messages that were compacted this step (compacted but not already in store)
+  const existingIds = new Set(
+    state.externalStore.entries.flatMap((e) => e.originalMessageIds),
+  )
+  const newlyCompacted = state.conversation.filter(
+    (m) => m.compacted && !existingIds.has(m.id),
+  )
+
+  if (newlyCompacted.length === 0) return state
+
+  const newEntry: ExternalStoreEntry = {
+    id: `ext-${state.externalStore.entries.length + 1}`,
+    originalMessageIds: newlyCompacted.map((m) => m.id),
+    tokens: newlyCompacted.reduce((sum, m) => sum + m.tokens, 0),
+    level: 0,
+  }
+
+  return {
+    ...state,
+    externalStore: {
+      entries: [...state.externalStore.entries, newEntry],
+      totalTokens: state.externalStore.totalTokens + newEntry.tokens,
+    },
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -207,11 +246,29 @@ export function calculateCache(
 }
 
 // ---------------------------------------------------------------------------
-// Pipeline stage 6: rollRetrieval (no-op placeholder for V3)
+// Pipeline stage 6: rollRetrieval
 // ---------------------------------------------------------------------------
 
-export function rollRetrieval(state: StepState): StepState {
-  return state
+/**
+ * Roll the dice for a retrieval event. If the external store is empty or the
+ * roll fails, this is a no-op. When retrieval fires, the cost is added to
+ * the step cost in calculateCost.
+ */
+export function rollRetrieval(
+  state: StepState,
+  message: Message,
+  config: SimulationConfig,
+): StepState {
+  // Only roll on LLM call steps when there's something in the store
+  if (!isLlmCallStep(message) || state.externalStore.entries.length === 0) {
+    return state
+  }
+
+  const p = retrievalProbability(state.compressedTokens, config)
+  const roll = state.rng()
+  if (roll >= p) return state
+
+  return { ...state, retrievalEvent: true }
 }
 
 // ---------------------------------------------------------------------------
@@ -245,6 +302,11 @@ export function calculateCost(
     stepCost = addCosts(stepCost, compactionCost)
   }
 
+  // Retrieval cost when a retrieval event fired
+  if (state.retrievalEvent) {
+    stepCost = addCosts(stepCost, retrievalCost(config))
+  }
+
   return {
     ...state,
     stepCost,
@@ -272,7 +334,7 @@ export function buildSnapshot(
     cumulativeCost: { ...state.cumulativeCost },
     compactionEvent: state.compactionEvent,
     externalStore: state.externalStore,
-    retrievalEvent: false,
+    retrievalEvent: state.retrievalEvent,
   }
 }
 
@@ -297,8 +359,10 @@ export const runSimulation = (
         summaryCounter: 0,
         cumulativeCost: ZERO_COST,
         peakContextSize: 0,
+        rng: createRng(42),
         // Per-step transient (reset in ingestMessage)
         compactionEvent: false,
+        retrievalEvent: false,
         tokensCompacted: 0,
         summaryTokens: 0,
         cache: ZERO_CACHE,
@@ -315,7 +379,7 @@ export const runSimulation = (
         state = evaluateCompaction(state, config)
         state = updateExternalStore(state)
         state = calculateCache(state, message, config)
-        state = rollRetrieval(state)
+        state = rollRetrieval(state, message, config)
         state = calculateCost(state, message, config)
 
         totalTokensGenerated += message.tokens
