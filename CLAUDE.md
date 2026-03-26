@@ -32,6 +32,8 @@ Key modelling concepts:
 - `npm run dev` — start dev server
 - `npm run build` — production build
 - `npm run lint` — lint
+- `npm test` — run tests (Vitest)
+- `npm run test:watch` — run tests in watch mode
 
 ## Conventions
 
