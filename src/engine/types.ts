@@ -77,6 +77,23 @@ export interface StepCost {
   readonly total: number
 }
 
+export interface ExternalStoreEntry {
+  readonly id: string
+  readonly originalMessageIds: readonly string[]
+  readonly tokens: number
+  readonly level: number
+}
+
+export interface ExternalStore {
+  readonly entries: readonly ExternalStoreEntry[]
+  readonly totalTokens: number
+}
+
+export const EMPTY_EXTERNAL_STORE: ExternalStore = {
+  entries: [],
+  totalTokens: 0,
+}
+
 export interface SimulationSnapshot {
   readonly stepIndex: number
   readonly message: Message
@@ -86,6 +103,8 @@ export interface SimulationSnapshot {
   readonly cost: StepCost
   readonly cumulativeCost: StepCost
   readonly compactionEvent: boolean
+  readonly externalStore: ExternalStore
+  readonly retrievalEvent: boolean
 }
 
 export interface SimulationResult {
