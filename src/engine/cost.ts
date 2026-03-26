@@ -8,6 +8,11 @@ export interface CostCalculator {
     compaction: { fired: boolean; tokensCompacted: number; summaryTokens: number },
     config: SimulationConfig,
   ) => StepCost
+  readonly calculateCompactionCost: (
+    tokensCompacted: number,
+    summaryTokens: number,
+    config: SimulationConfig,
+  ) => StepCost
 }
 
 export class Cost extends Context.Tag('Cost')<Cost, CostCalculator>() {}
@@ -65,6 +70,17 @@ export const defaultCostCalculator: CostCalculator = {
       compactionInput,
       compactionOutput,
       total,
+    }
+  },
+
+  calculateCompactionCost(tokensCompacted, summaryTokens, config) {
+    const compactionInput = tokensCompacted * config.compactionInputPrice
+    const compactionOutput = summaryTokens * config.compactionOutputPrice
+    return {
+      ...ZERO_COST,
+      compactionInput,
+      compactionOutput,
+      total: compactionInput + compactionOutput,
     }
   },
 }

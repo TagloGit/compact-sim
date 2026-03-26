@@ -79,7 +79,7 @@ describe('runSimulation', () => {
     }
   })
 
-  it('only assistant/reasoning steps incur output cost', () => {
+  it('only assistant/reasoning steps incur LLM I/O cost, but compaction cost can appear on any step', () => {
     const config: SimulationConfig = {
       ...DEFAULT_CONFIG,
       toolCallCycles: 5,
@@ -95,6 +95,7 @@ describe('runSimulation', () => {
         expect(snapshot.cost.cachedInput).toBe(0)
         expect(snapshot.cost.uncachedInput).toBe(0)
         expect(snapshot.cost.cacheWrite).toBe(0)
+        // compactionInput/compactionOutput may be non-zero if compaction fired on this step
       }
     }
   })
@@ -334,5 +335,91 @@ describe('runSimulation', () => {
       0,
     )
     expect(result.summary.totalTokensGenerated).toBe(sumTokens)
+  })
+
+  it('compaction cost is recorded when compaction fires on a tool_result step', () => {
+    // Design config so compaction fires on a tool_result step (large tool results fill context fast)
+    const config: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      toolCallCycles: 10,
+      toolCallSize: 100,
+      toolResultSize: 3_000,
+      assistantMessageSize: 100,
+      reasoningOutputSize: 0,
+      userMessageFrequency: 100,
+      userMessageSize: 100,
+      systemPromptSize: 1_000,
+      contextWindow: 5_000,
+      compactionThreshold: 0.8, // fires at > 4000
+      compressionRatio: 10,
+    }
+    const result = run(config)
+    // Find a compaction event that fired on a tool_result step
+    const compactionOnToolResult = result.snapshots.find(
+      (s) => s.compactionEvent && s.message.type === 'tool_result',
+    )
+    expect(compactionOnToolResult).toBeDefined()
+    expect(compactionOnToolResult!.cost.compactionInput).toBeGreaterThan(0)
+  })
+
+  it('strategy 2 fires compaction when main threshold is exceeded before incremental interval', () => {
+    // Small context window so threshold fires before incremental interval
+    const config: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      selectedStrategy: 'incremental',
+      toolCallCycles: 10,
+      toolCallSize: 200,
+      toolResultSize: 2_000,
+      assistantMessageSize: 300,
+      reasoningOutputSize: 0,
+      userMessageFrequency: 100,
+      userMessageSize: 200,
+      systemPromptSize: 1_000,
+      contextWindow: 5_000,
+      compactionThreshold: 0.8, // fires at > 4000
+      incrementalInterval: 100_000, // very high — would never fire on its own
+      summaryAccumulationThreshold: 500_000,
+      compressionRatio: 10,
+    }
+    const result = run(config)
+    expect(result.summary.compactionEvents).toBeGreaterThanOrEqual(1)
+    // Peak context should stay below contextWindow since compaction fires
+    expect(result.summary.peakContextSize).toBeLessThan(config.contextWindow)
+  })
+
+  it('known-answer: fixed config produces exact cost breakdown at step 5', () => {
+    const config: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      toolCallCycles: 3,
+      toolCallSize: 200,
+      toolResultSize: 1_000,
+      assistantMessageSize: 300,
+      reasoningOutputSize: 0,
+      userMessageFrequency: 100,
+      userMessageSize: 200,
+      systemPromptSize: 2_000,
+      contextWindow: 200_000,
+      compactionThreshold: 0.99,
+      compressionRatio: 10,
+      baseInputPrice: 5.0 / 1_000_000,
+      outputPrice: 25.0 / 1_000_000,
+      cacheWriteMultiplier: 1.25,
+      cacheHitMultiplier: 0.10,
+      minCacheableTokens: 1_000,
+      toolCompressionEnabled: false,
+    }
+    const result = run(config)
+    // Step 0: system (2000 tokens) — not LLM call, zero cost
+    // Step 1: user (200 tokens) — not LLM call, zero cost
+    // Step 2: assistant (300 tokens) — first LLM call
+    //   Context: system(2000) + user(200) + assistant(300) = 2500 total
+    //   No previous context → first step: cache write = 2500 - 300 = 2200, uncached = 300
+    //   Output: 300 * 25/1M = 0.0075
+    const step2 = result.snapshots[2]
+    expect(step2.message.type).toBe('assistant')
+    expect(step2.cost.output).toBeCloseTo(300 * 25 / 1_000_000, 10)
+    expect(step2.cost.cacheWrite).toBeCloseTo(2200 * 5 / 1_000_000 * 1.25, 10)
+    expect(step2.cost.uncachedInput).toBeCloseTo(300 * 5 / 1_000_000, 10)
+    expect(step2.cost.cachedInput).toBe(0)
   })
 })

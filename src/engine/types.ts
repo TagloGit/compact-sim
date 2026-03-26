@@ -105,7 +105,7 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   selectedStrategy: 'full-compaction',
 
   // Conversation shape
-  toolCallCycles: 50,
+  toolCallCycles: 100,
   toolCallSize: 200,
   toolResultSize: 2_000,
   assistantMessageSize: 300,
@@ -124,7 +124,7 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   outputPrice: 25.0 / 1_000_000,
   cacheWriteMultiplier: 1.25,
   cacheHitMultiplier: 0.10,
-  minCacheableTokens: 2_048,
+  minCacheableTokens: 4_096,
   compactionInputPrice: 0.80 / 1_000_000,
   compactionOutputPrice: 4.0 / 1_000_000,
 
