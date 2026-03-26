@@ -17,10 +17,10 @@ interface PlaybackControlsProps {
 }
 
 const SPEED_OPTIONS = [
-  { label: '4x', ms: 100 },
-  { label: '2x', ms: 250 },
-  { label: '1x', ms: 500 },
   { label: '0.5x', ms: 1000 },
+  { label: '1x', ms: 500 },
+  { label: '2x', ms: 250 },
+  { label: '4x', ms: 100 },
 ] as const
 
 export function PlaybackControls({
@@ -29,7 +29,7 @@ export function PlaybackControls({
   onStepChange,
 }: PlaybackControlsProps) {
   const [playing, setPlaying] = useState(false)
-  const [speedIndex, setSpeedIndex] = useState(1) // default 2x (250ms)
+  const [speedIndex, setSpeedIndex] = useState(2) // default 2x (250ms)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const currentStepRef = useRef(currentStep)
 
