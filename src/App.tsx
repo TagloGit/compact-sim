@@ -1,6 +1,8 @@
 import { useSimulation } from '@/hooks/useSimulation'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { ParameterPanel } from '@/components/controls/ParameterPanel'
+import { PlaybackControls } from '@/components/controls/PlaybackControls'
+import { ContextStack } from '@/components/visualisations/ContextStack'
 
 function formatCost(dollars: number): string {
   if (dollars < 0.01) return `$${dollars.toFixed(4)}`
@@ -14,7 +16,7 @@ function formatTokens(tokens: number): string {
 }
 
 function App() {
-  const { config, updateConfig, result, currentStep, currentSnapshot } = useSimulation()
+  const { config, updateConfig, result, currentStep, setCurrentStep, currentSnapshot } = useSimulation()
 
   return (
     <AppLayout
@@ -73,10 +75,22 @@ function App() {
           </div>
         )}
 
-        {/* Placeholder for future visualisations (issues 5 & 6) */}
-        <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          Visualisations will appear here (playback controls, context stack, charts)
-        </div>
+        {/* Playback controls */}
+        {result && (
+          <PlaybackControls
+            currentStep={currentStep}
+            totalSteps={result.snapshots.length}
+            onStepChange={setCurrentStep}
+          />
+        )}
+
+        {/* Context stack visualisation */}
+        {currentSnapshot && (
+          <ContextStack
+            snapshot={currentSnapshot}
+            contextWindow={config.contextWindow}
+          />
+        )}
       </div>
     </AppLayout>
   )
