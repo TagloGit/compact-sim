@@ -184,6 +184,145 @@ describe('runSimulation', () => {
     )
   })
 
+  it('tool results are compressed when toolCompressionEnabled is true', () => {
+    const config: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      toolCallCycles: 5,
+      toolResultSize: 2_000,
+      toolCompressionEnabled: true,
+      toolCompressionRatio: 5,
+      reasoningOutputSize: 0,
+      userMessageFrequency: 100,
+      contextWindow: 200_000,
+    }
+    const result = run(config)
+    // Every tool_result in the conversation should be compressed
+    for (const snapshot of result.snapshots) {
+      if (snapshot.message.type === 'tool_result') {
+        expect(snapshot.message.tokens).toBe(Math.ceil(2_000 / 5))
+      }
+    }
+  })
+
+  it('tool results are untouched when toolCompressionEnabled is false', () => {
+    const config: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      toolCallCycles: 5,
+      toolResultSize: 2_000,
+      toolCompressionEnabled: false,
+      toolCompressionRatio: 5,
+      reasoningOutputSize: 0,
+      userMessageFrequency: 100,
+    }
+    const result = run(config)
+    for (const snapshot of result.snapshots) {
+      if (snapshot.message.type === 'tool_result') {
+        expect(snapshot.message.tokens).toBe(2_000)
+      }
+    }
+  })
+
+  it('compression ratio applies ceil division correctly', () => {
+    const config: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      toolCallCycles: 3,
+      toolResultSize: 1_001, // 1001 / 3 = 333.67 → ceil = 334
+      toolCompressionEnabled: true,
+      toolCompressionRatio: 3,
+      reasoningOutputSize: 0,
+      userMessageFrequency: 100,
+      contextWindow: 200_000,
+    }
+    const result = run(config)
+    for (const snapshot of result.snapshots) {
+      if (snapshot.message.type === 'tool_result') {
+        expect(snapshot.message.tokens).toBe(Math.ceil(1_001 / 3))
+      }
+    }
+  })
+
+  it('context grows slower with tool compression enabled', () => {
+    const baseConfig: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      toolCallCycles: 10,
+      toolResultSize: 2_000,
+      toolCompressionEnabled: false,
+      reasoningOutputSize: 0,
+      userMessageFrequency: 100,
+      contextWindow: 200_000,
+      compactionThreshold: 0.99, // effectively no compaction
+    }
+    const withCompression: SimulationConfig = {
+      ...baseConfig,
+      toolCompressionEnabled: true,
+      toolCompressionRatio: 5,
+    }
+
+    const resultWithout = run(baseConfig)
+    const resultWith = run(withCompression)
+
+    const peakWithout = resultWithout.summary.peakContextSize
+    const peakWith = resultWith.summary.peakContextSize
+    expect(peakWith).toBeLessThan(peakWithout)
+  })
+
+  it('fewer compaction events with tool compression enabled', () => {
+    const baseConfig: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      toolCallCycles: 20,
+      toolCallSize: 200,
+      toolResultSize: 2_000,
+      assistantMessageSize: 300,
+      reasoningOutputSize: 0,
+      userMessageFrequency: 100,
+      systemPromptSize: 4_000,
+      contextWindow: 10_000,
+      compactionThreshold: 0.8,
+      compressionRatio: 10,
+      toolCompressionEnabled: false,
+    }
+    const withCompression: SimulationConfig = {
+      ...baseConfig,
+      toolCompressionEnabled: true,
+      toolCompressionRatio: 5,
+    }
+
+    const resultWithout = run(baseConfig)
+    const resultWith = run(withCompression)
+
+    expect(resultWith.summary.compactionEvents).toBeLessThanOrEqual(
+      resultWithout.summary.compactionEvents,
+    )
+  })
+
+  it('tool compression works with incremental strategy', () => {
+    const config: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      selectedStrategy: 'incremental',
+      toolCallCycles: 20,
+      toolCallSize: 200,
+      toolResultSize: 2_000,
+      assistantMessageSize: 300,
+      reasoningOutputSize: 0,
+      userMessageFrequency: 100,
+      systemPromptSize: 4_000,
+      incrementalInterval: 10_000,
+      summaryAccumulationThreshold: 50_000,
+      compressionRatio: 10,
+      toolCompressionEnabled: true,
+      toolCompressionRatio: 5,
+    }
+    const result = run(config)
+    // Should still run without error and produce snapshots
+    expect(result.snapshots.length).toBeGreaterThan(0)
+    // Tool results should be compressed
+    for (const snapshot of result.snapshots) {
+      if (snapshot.message.type === 'tool_result') {
+        expect(snapshot.message.tokens).toBe(Math.ceil(2_000 / 5))
+      }
+    }
+  })
+
   it('total tokens generated matches sum of all message tokens', () => {
     const config: SimulationConfig = {
       ...DEFAULT_CONFIG,

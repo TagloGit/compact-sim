@@ -59,7 +59,15 @@ export const runSimulation = (
       const strategy = getStrategy(config.selectedStrategy)
 
       for (let i = 0; i < allMessages.length; i++) {
-        const message = allMessages[i]
+        // Apply tool result compression at ingestion (zero LLM cost)
+        const raw = allMessages[i]
+        const message =
+          config.toolCompressionEnabled && raw.type === 'tool_result'
+            ? {
+                ...raw,
+                tokens: Math.ceil(raw.tokens / config.toolCompressionRatio),
+              }
+            : raw
         conversation.push(message)
         totalTokensGenerated += message.tokens
 
