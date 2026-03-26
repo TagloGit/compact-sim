@@ -162,6 +162,79 @@ function NumberInput({ label, value, min, max, step = 1, onChange }: NumberInput
   )
 }
 
+// --- Strategy select (deferred update) ---
+
+interface StrategySelectProps {
+  value: StrategyType
+  onChange: (value: StrategyType) => void
+}
+
+function StrategySelect({ value, onChange }: StrategySelectProps) {
+  const [local, setLocal] = useState(value)
+
+  useEffect(() => {
+    setLocal(value)
+  }, [value])
+
+  const handleChange = useCallback(
+    (v: string | null) => {
+      if (v === null) return
+      const typed = v as StrategyType
+      setLocal(typed)
+      // Defer config update so React paints the select change before simulation runs
+      setTimeout(() => onChange(typed), 0)
+    },
+    [onChange],
+  )
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">Primary strategy</Label>
+      <Select value={local} onValueChange={handleChange}>
+        <SelectTrigger className="h-8 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="full-compaction" className="text-xs">1 — Full compaction</SelectItem>
+          <SelectItem value="incremental" className="text-xs">2 — Incremental compaction</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
+// --- Deferred switch ---
+
+interface DeferredSwitchProps {
+  label: string
+  checked: boolean
+  onChange: (value: boolean) => void
+}
+
+function DeferredSwitch({ label, checked, onChange }: DeferredSwitchProps) {
+  const [local, setLocal] = useState(checked)
+
+  useEffect(() => {
+    setLocal(checked)
+  }, [checked])
+
+  const handleChange = useCallback(
+    (v: boolean) => {
+      setLocal(v)
+      // Defer config update so React paints the toggle before simulation runs
+      setTimeout(() => onChange(v), 0)
+    },
+    [onChange],
+  )
+
+  return (
+    <div className="flex items-center justify-between">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Switch checked={local} onCheckedChange={handleChange} />
+    </div>
+  )
+}
+
 // --- Section header ---
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
@@ -189,21 +262,10 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
         <SectionHeader>Strategy</SectionHeader>
         <CollapsibleContent>
           <div className="space-y-3 pb-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Primary strategy</Label>
-              <Select
-                value={config.selectedStrategy}
-                onValueChange={(v) => onUpdate('selectedStrategy', v as StrategyType)}
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="full-compaction">1 — Full compaction</SelectItem>
-                  <SelectItem value="incremental">2 — Incremental compaction</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <StrategySelect
+              value={config.selectedStrategy}
+              onChange={(v) => onUpdate('selectedStrategy', v)}
+            />
 
             {config.selectedStrategy === 'incremental' && (
               <>
@@ -226,13 +288,11 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
               </>
             )}
 
-            <div className="flex items-center justify-between">
-              <Label className="text-xs text-muted-foreground">Tool result compression</Label>
-              <Switch
-                checked={config.toolCompressionEnabled}
-                onCheckedChange={(v) => onUpdate('toolCompressionEnabled', v)}
-              />
-            </div>
+            <DeferredSwitch
+              label="Tool result compression"
+              checked={config.toolCompressionEnabled}
+              onChange={(v) => onUpdate('toolCompressionEnabled', v)}
+            />
 
             {config.toolCompressionEnabled && (
               <SliderInput
