@@ -44,6 +44,14 @@ export interface SimulationConfig {
   readonly toolCompressionEnabled: boolean
   readonly toolCompressionRatio: number
 
+  // Strategy 4 — Lossless with retrieval
+  readonly retrievalQueryTokens: number
+  readonly retrievalResponseTokens: number
+  readonly pRetrieveMax: number
+  readonly compressedTokensCap: number
+  readonly lcmGrepRatio: number
+  readonly lcmGrepResponseTokens: number
+
   // Pricing (per token, not per million)
   readonly baseInputPrice: number
   readonly outputPrice: number
@@ -74,6 +82,8 @@ export interface StepCost {
   readonly output: number
   readonly compactionInput: number
   readonly compactionOutput: number
+  readonly retrievalInput: number
+  readonly retrievalOutput: number
   readonly total: number
 }
 
@@ -154,4 +164,12 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   // Strategy 3 — Tool result compression
   toolCompressionEnabled: false,
   toolCompressionRatio: 5,
+
+  // Strategy 4 — Lossless with retrieval
+  retrievalQueryTokens: 500,
+  retrievalResponseTokens: 300,
+  pRetrieveMax: 0.20,
+  compressedTokensCap: 100_000,
+  lcmGrepRatio: 0.70,
+  lcmGrepResponseTokens: 100,
 }
