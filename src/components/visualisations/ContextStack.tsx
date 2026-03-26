@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import type { SimulationSnapshot, MessageType } from '@/engine/types'
 
 interface ContextStackProps {
@@ -33,30 +32,11 @@ function formatTokens(tokens: number): string {
 }
 
 export function ContextStack({ snapshot, contextWindow }: ContextStackProps) {
-  const { context, conversation } = snapshot
+  const { context } = snapshot
   const utilisationPct = Math.round((context.totalTokens / contextWindow) * 100)
 
-  // Active context message ids
-  const activeIds = useMemo(
-    () => new Set(context.messages.map((m) => m.id)),
-    [context.messages],
-  )
-
-  // Compacted messages total tokens (shown as faded segment)
-  const compactedTokens = useMemo(
-    () =>
-      conversation
-        .filter((m) => m.compacted && !activeIds.has(m.id))
-        .reduce((sum, m) => sum + m.tokens, 0),
-    [conversation, activeIds],
-  )
-
   // Which message types are present (for the legend)
-  const presentTypes = useMemo(() => {
-    const types = new Set(context.messages.map((m) => m.type))
-    if (compactedTokens > 0) types.add('summary' as MessageType) // compacted shown alongside summary
-    return types
-  }, [context.messages, compactedTokens])
+  const presentTypes = new Set(context.messages.map((m) => m.type))
 
   return (
     <div className="space-y-1.5">
@@ -70,16 +50,6 @@ export function ContextStack({ snapshot, contextWindow }: ContextStackProps) {
 
       {/* Horizontal stacked bar — each segment is (tokens / contextWindow)% wide */}
       <div className="relative h-6 w-full rounded bg-muted overflow-hidden flex">
-        {/* Compacted tokens (faded, at the start) */}
-        {compactedTokens > 0 && (
-          <div
-            className="bg-purple-400/30 dark:bg-purple-500/30 h-full shrink-0"
-            style={{ width: `${(compactedTokens / contextWindow) * 100}%` }}
-            title={`Compacted: ${compactedTokens.toLocaleString()} original tokens`}
-          />
-        )}
-
-        {/* Active context messages */}
         {context.messages.map((msg) => {
           const widthPct = (msg.tokens / contextWindow) * 100
           return (
@@ -104,12 +74,6 @@ export function ContextStack({ snapshot, contextWindow }: ContextStackProps) {
                 <span className="text-xs text-muted-foreground">{MESSAGE_LABELS[type]}</span>
               </div>
             ))}
-          {compactedTokens > 0 && (
-            <div className="flex items-center gap-1">
-              <div className="bg-purple-400/30 dark:bg-purple-500/30 size-2.5 rounded-sm" />
-              <span className="text-xs text-muted-foreground">Compacted</span>
-            </div>
-          )}
         </div>
 
         <span className="text-xs text-muted-foreground shrink-0">

@@ -99,7 +99,7 @@ export const prefixCacheModel: CacheModel = {
     const uncachedTokens = lastTokens
 
     const totalInput = current.totalTokens
-    const hitRate = totalInput > 0 ? (cacheHitTokens / totalInput) * 100 : 0
+    const hitRate = totalInput > 0 ? cacheHitTokens / totalInput : 0
 
     return {
       cachedPrefixTokens: cacheHitTokens,

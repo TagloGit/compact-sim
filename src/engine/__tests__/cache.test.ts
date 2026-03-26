@@ -53,7 +53,7 @@ describe('prefixCacheModel', () => {
     expect(result.cacheWriteTokens).toBe(0)
     // Last message (a1) is uncached
     expect(result.uncachedTokens).toBe(300)
-    expect(result.hitRate).toBeCloseTo((4_200 / 4_500) * 100, 1)
+    expect(result.hitRate).toBeCloseTo(4_200 / 4_500, 4)
   })
 
   it('after compaction: only system prompt is a cache hit, summary is cache write', () => {
