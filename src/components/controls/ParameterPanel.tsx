@@ -23,43 +23,46 @@ interface SliderInputProps {
 }
 
 function SliderInput({ label, value, min, max, step = 1, onChange }: SliderInputProps) {
-  const [localValue, setLocalValue] = useState(String(value))
+  const [localText, setLocalText] = useState(String(value))
+  const [localNumeric, setLocalNumeric] = useState(value)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
 
-  // Sync local value when prop changes (e.g. from reset)
+  // Sync local values when prop changes (e.g. from external reset)
   useEffect(() => {
-    setLocalValue(String(value))
+    setLocalText(String(value))
+    setLocalNumeric(value)
   }, [value])
 
   const handleSliderChange = useCallback(
     (newValue: number | readonly number[]) => {
       const v = Array.isArray(newValue) ? newValue[0] : newValue
-      setLocalValue(String(v))
-      // Debounce slider drags
+      setLocalNumeric(v)
+      setLocalText(String(v))
+      // Debounce config updates to avoid re-running simulation on every drag tick
       if (debounceRef.current) clearTimeout(debounceRef.current)
-      debounceRef.current = setTimeout(() => onChange(v), 50)
+      debounceRef.current = setTimeout(() => onChange(v), 150)
     },
     [onChange],
   )
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const raw = e.target.value
-      setLocalValue(raw)
+      setLocalText(e.target.value)
     },
     [],
   )
 
   const handleInputBlur = useCallback(() => {
-    const parsed = parseFloat(localValue)
+    const parsed = parseFloat(localText)
     if (isNaN(parsed)) {
-      setLocalValue(String(value))
+      setLocalText(String(value))
       return
     }
     const clamped = Math.min(max, Math.max(min, parsed))
-    setLocalValue(String(clamped))
+    setLocalText(String(clamped))
+    setLocalNumeric(clamped)
     onChange(clamped)
-  }, [localValue, value, min, max, onChange])
+  }, [localText, value, min, max, onChange])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -76,7 +79,7 @@ function SliderInput({ label, value, min, max, step = 1, onChange }: SliderInput
         <Label className="text-xs text-muted-foreground">{label}</Label>
         <Input
           type="text"
-          value={localValue}
+          value={localText}
           onChange={handleInputChange}
           onBlur={handleInputBlur}
           onKeyDown={handleKeyDown}
@@ -84,7 +87,7 @@ function SliderInput({ label, value, min, max, step = 1, onChange }: SliderInput
         />
       </div>
       <Slider
-        value={[value]}
+        value={[localNumeric]}
         min={min}
         max={max}
         step={step}
