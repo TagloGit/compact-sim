@@ -30,7 +30,10 @@ function App() {
         <div>
           <h1 className="text-xl font-semibold">Compaction Simulator</h1>
           <p className="text-sm text-muted-foreground">
-            Strategy 1 — Full compaction at threshold
+            {config.selectedStrategy === 'full-compaction'
+              ? 'Strategy 1 — Full compaction at threshold'
+              : 'Strategy 2 — Incremental compaction at intervals'}
+            {config.toolCompressionEnabled && ' + tool result compression'}
           </p>
         </div>
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { strategy1 } from '../strategy'
+import { strategy1, getStrategy } from '../strategy'
 import type { ContextState, Message, SimulationConfig } from '../types'
 import { DEFAULT_CONFIG } from '../types'
 
@@ -106,5 +106,35 @@ describe('strategy1', () => {
     ])
     const result = strategy1.evaluate(context, config)
     expect(result.compactedMessageIds).toEqual(['u1', 'a1'])
+  })
+})
+
+describe('getStrategy', () => {
+  it('returns a valid strategy for full-compaction', () => {
+    const strategy = getStrategy('full-compaction')
+    expect(strategy).toBeDefined()
+    expect(typeof strategy.evaluate).toBe('function')
+  })
+
+  it('returns a valid strategy for incremental', () => {
+    const strategy = getStrategy('incremental')
+    expect(strategy).toBeDefined()
+    expect(typeof strategy.evaluate).toBe('function')
+  })
+
+  it('full-compaction strategy behaves like strategy1', () => {
+    const config: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      contextWindow: 10_000,
+      compactionThreshold: 0.8,
+      compressionRatio: 10,
+    }
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('a1', 'assistant', 5_000),
+    ])
+    const fromRegistry = getStrategy('full-compaction').evaluate(context, config)
+    const fromDirect = strategy1.evaluate(context, config)
+    expect(fromRegistry.shouldCompact).toBe(fromDirect.shouldCompact)
   })
 })

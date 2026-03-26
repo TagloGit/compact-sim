@@ -1,10 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { SimulationConfig } from '@/engine/types'
+import type { StrategyType } from '@/engine/types'
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 
 interface ParameterPanelProps {
   config: SimulationConfig
@@ -180,6 +183,69 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
   return (
     <div className="space-y-1 p-4">
       <h2 className="text-sm font-semibold mb-3">Parameters</h2>
+
+      {/* Strategy */}
+      <Collapsible defaultOpen>
+        <SectionHeader>Strategy</SectionHeader>
+        <CollapsibleContent>
+          <div className="space-y-3 pb-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Primary strategy</Label>
+              <Select
+                value={config.selectedStrategy}
+                onValueChange={(v) => onUpdate('selectedStrategy', v as StrategyType)}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="full-compaction">1 — Full compaction</SelectItem>
+                  <SelectItem value="incremental">2 — Incremental compaction</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {config.selectedStrategy === 'incremental' && (
+              <>
+                <SliderInput
+                  label="Incremental interval (tokens)"
+                  value={config.incrementalInterval}
+                  min={5000}
+                  max={100000}
+                  step={1000}
+                  onChange={(v) => onUpdate('incrementalInterval', v)}
+                />
+                <SliderInput
+                  label="Summary accumulation threshold (tokens)"
+                  value={config.summaryAccumulationThreshold}
+                  min={10000}
+                  max={200000}
+                  step={5000}
+                  onChange={(v) => onUpdate('summaryAccumulationThreshold', v)}
+                />
+              </>
+            )}
+
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground">Tool result compression</Label>
+              <Switch
+                checked={config.toolCompressionEnabled}
+                onCheckedChange={(v) => onUpdate('toolCompressionEnabled', v)}
+              />
+            </div>
+
+            {config.toolCompressionEnabled && (
+              <SliderInput
+                label="Tool compression ratio (X:1)"
+                value={config.toolCompressionRatio}
+                min={2}
+                max={20}
+                onChange={(v) => onUpdate('toolCompressionRatio', v)}
+              />
+            )}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Conversation Shape */}
       <Collapsible defaultOpen>

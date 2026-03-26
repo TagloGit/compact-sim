@@ -7,7 +7,7 @@ import type {
   SimulationSnapshot,
 } from './types'
 import { generateConversation } from './conversation'
-import { strategy1 } from './strategy'
+import { getStrategy } from './strategy'
 import { prefixCacheModel, ZERO_CACHE } from './cache'
 import { defaultCostCalculator, ZERO_COST, addCosts } from './cost'
 
@@ -56,6 +56,8 @@ export const runSimulation = (
       let totalTokensGenerated = 0
       let summaryCounter = 0
 
+      const strategy = getStrategy(config.selectedStrategy)
+
       for (let i = 0; i < allMessages.length; i++) {
         const message = allMessages[i]
         conversation.push(message)
@@ -70,7 +72,7 @@ export const runSimulation = (
         let summaryTokens = 0
         let summaryMessage: Message | undefined
 
-        const result = strategy1.evaluate(context, config)
+        const result = strategy.evaluate(context, config)
         if (result.shouldCompact && result.newContext && result.summaryMessage) {
           compactionEvent = true
           compactionEvents++
