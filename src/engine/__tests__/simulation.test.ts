@@ -111,6 +111,79 @@ describe('runSimulation', () => {
     expect(result.summary.peakContextSize).toBe(maxFromSnapshots)
   })
 
+  it('incremental strategy produces multiple compaction events', () => {
+    const config: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      selectedStrategy: 'incremental',
+      toolCallCycles: 20,
+      toolCallSize: 200,
+      toolResultSize: 2_000,
+      assistantMessageSize: 300,
+      reasoningOutputSize: 0,
+      userMessageFrequency: 100,
+      userMessageSize: 200,
+      systemPromptSize: 4_000,
+      incrementalInterval: 10_000,
+      summaryAccumulationThreshold: 50_000,
+      compressionRatio: 10,
+    }
+    const result = run(config)
+    // With ~2500 tokens per cycle and 10k interval, should compact ~every 4 cycles
+    expect(result.summary.compactionEvents).toBeGreaterThanOrEqual(2)
+  })
+
+  it('incremental strategy accumulates summaries in context', () => {
+    const config: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      selectedStrategy: 'incremental',
+      toolCallCycles: 20,
+      toolCallSize: 200,
+      toolResultSize: 2_000,
+      assistantMessageSize: 300,
+      reasoningOutputSize: 0,
+      userMessageFrequency: 100,
+      userMessageSize: 200,
+      systemPromptSize: 4_000,
+      incrementalInterval: 10_000,
+      summaryAccumulationThreshold: 50_000,
+      compressionRatio: 10,
+    }
+    const result = run(config)
+    // After multiple compactions, context should have multiple summaries
+    const lastSnapshot = result.snapshots[result.snapshots.length - 1]
+    const summariesInContext = lastSnapshot.context.messages.filter(
+      (m) => m.type === 'summary',
+    )
+    if (result.summary.compactionEvents >= 2) {
+      expect(summariesInContext.length).toBeGreaterThanOrEqual(2)
+    }
+  })
+
+  it('incremental strategy keeps context smaller than full compaction threshold', () => {
+    const config: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      selectedStrategy: 'incremental',
+      toolCallCycles: 20,
+      toolCallSize: 200,
+      toolResultSize: 2_000,
+      assistantMessageSize: 300,
+      reasoningOutputSize: 0,
+      userMessageFrequency: 100,
+      userMessageSize: 200,
+      systemPromptSize: 4_000,
+      contextWindow: 200_000,
+      incrementalInterval: 10_000,
+      summaryAccumulationThreshold: 50_000,
+      compressionRatio: 10,
+    }
+    const result = run(config)
+    // With frequent incremental compaction, peak context should stay well below
+    // the full compaction threshold (85% of 200k = 170k)
+    expect(result.summary.peakContextSize).toBeLessThan(
+      config.contextWindow * config.compactionThreshold,
+    )
+  })
+
   it('total tokens generated matches sum of all message tokens', () => {
     const config: SimulationConfig = {
       ...DEFAULT_CONFIG,
