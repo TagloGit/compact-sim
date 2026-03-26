@@ -77,21 +77,36 @@ export const runSimulation = (
           compactionEvent = true
           compactionEvents++
 
-          // Generate a deterministic summary ID
-          summaryCounter++
-          summaryMessage = {
-            ...result.summaryMessage,
-            id: `summary-${summaryCounter}`,
+          // Generate deterministic summary IDs for all new summaries
+          // in the strategy result (replacing any temporary IDs)
+          const newSummaries = result.newContext.messages.filter(
+            (m) =>
+              m.type === 'summary' &&
+              !context.messages.some((existing) => existing.id === m.id),
+          )
+          const summaryIdMap = new Map<string, string>()
+          for (const s of newSummaries) {
+            summaryCounter++
+            summaryIdMap.set(s.id, `summary-${summaryCounter}`)
           }
 
-          // Calculate compaction cost inputs
-          tokensCompacted = context.totalTokens - (
-            context.messages.find((m) => m.type === 'system')?.tokens ?? 0
-          )
+          // The primary summary message (for cost and compactedInto tracking)
+          const primarySummaryId =
+            summaryIdMap.get(result.summaryMessage.id) ??
+            result.summaryMessage.id
+          summaryMessage = {
+            ...result.summaryMessage,
+            id: primarySummaryId,
+          }
+
+          // Calculate compaction cost: only the tokens that were actually compacted
+          const compactedIds = new Set(result.compactedMessageIds)
+          tokensCompacted = context.messages
+            .filter((m) => compactedIds.has(m.id))
+            .reduce((sum, m) => sum + m.tokens, 0)
           summaryTokens = summaryMessage.tokens
 
           // Mark compacted messages in conversation
-          const compactedIds = new Set(result.compactedMessageIds)
           for (let j = 0; j < conversation.length; j++) {
             if (compactedIds.has(conversation[j].id)) {
               conversation[j] = {
@@ -102,16 +117,19 @@ export const runSimulation = (
             }
           }
 
-          // Add summary to conversation
-          conversation.push(summaryMessage)
+          // Add new summary messages to conversation
+          for (const s of newSummaries) {
+            const remappedId = summaryIdMap.get(s.id) ?? s.id
+            conversation.push({ ...s, id: remappedId })
+          }
 
-          // Update context with the new post-compaction state
-          const systemMsg = context.messages.find((m) => m.type === 'system')
+          // Use the strategy's newContext directly, with remapped summary IDs
           context = {
-            messages: systemMsg
-              ? [systemMsg, summaryMessage]
-              : [summaryMessage],
-            totalTokens: (systemMsg?.tokens ?? 0) + summaryMessage.tokens,
+            messages: result.newContext.messages.map((m) => {
+              const remappedId = summaryIdMap.get(m.id)
+              return remappedId ? { ...m, id: remappedId } : m
+            }),
+            totalTokens: result.newContext.totalTokens,
           }
         }
 

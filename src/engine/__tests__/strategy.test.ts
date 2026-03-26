@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { strategy1, getStrategy } from '../strategy'
+import { strategy1, strategy2, getStrategy } from '../strategy'
 import type { ContextState, Message, SimulationConfig } from '../types'
 import { DEFAULT_CONFIG } from '../types'
 
@@ -106,6 +106,176 @@ describe('strategy1', () => {
     ])
     const result = strategy1.evaluate(context, config)
     expect(result.compactedMessageIds).toEqual(['u1', 'a1'])
+  })
+})
+
+describe('strategy2', () => {
+  const config: SimulationConfig = {
+    ...DEFAULT_CONFIG,
+    incrementalInterval: 5_000,
+    summaryAccumulationThreshold: 10_000,
+    compressionRatio: 10,
+  }
+
+  it('does NOT compact when new content is below incrementalInterval', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 300),
+    ])
+    // New content: 200 + 300 = 500, interval = 5000
+    const result = strategy2.evaluate(context, config)
+    expect(result.shouldCompact).toBe(false)
+  })
+
+  it('compacts when new content exceeds incrementalInterval', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 2_000),
+      makeMsg('tc1', 'tool_call', 200),
+      makeMsg('tr1', 'tool_result', 3_000),
+    ])
+    // New content: 200 + 2000 + 200 + 3000 = 5400 > 5000
+    const result = strategy2.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+  })
+
+  it('only compacts new content after the last summary', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s1', 'summary', 500), // existing summary
+      makeMsg('u2', 'user', 200),
+      makeMsg('a2', 'assistant', 2_000),
+      makeMsg('tc2', 'tool_call', 200),
+      makeMsg('tr2', 'tool_result', 3_000),
+    ])
+    // New content (after s1): 200 + 2000 + 200 + 3000 = 5400 > 5000
+    const result = strategy2.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+    // Summary = ceil(5400 / 10) = 540
+    expect(result.summaryMessage!.tokens).toBe(540)
+    // Compacted IDs should NOT include the existing summary or system
+    expect(result.compactedMessageIds).toContain('u2')
+    expect(result.compactedMessageIds).toContain('a2')
+    expect(result.compactedMessageIds).toContain('tc2')
+    expect(result.compactedMessageIds).toContain('tr2')
+    expect(result.compactedMessageIds).not.toContain('sys')
+    expect(result.compactedMessageIds).not.toContain('s1')
+  })
+
+  it('accumulates multiple summaries in context', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s1', 'summary', 500),
+      makeMsg('u2', 'user', 200),
+      makeMsg('a2', 'assistant', 3_000),
+      makeMsg('tc2', 'tool_call', 200),
+      makeMsg('tr2', 'tool_result', 2_000),
+    ])
+    // New content: 200 + 3000 + 200 + 2000 = 5400 > 5000
+    const result = strategy2.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+    // New context: [system, s1, new_summary]
+    expect(result.newContext!.messages.length).toBe(3)
+    expect(result.newContext!.messages[0].type).toBe('system')
+    expect(result.newContext!.messages[1].id).toBe('s1')
+    expect(result.newContext!.messages[2].type).toBe('summary')
+  })
+
+  it('triggers meta-compaction when summaries exceed threshold', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s1', 'summary', 4_000),
+      makeMsg('s2', 'summary', 4_000),
+      makeMsg('u3', 'user', 200),
+      makeMsg('a3', 'assistant', 3_000),
+      makeMsg('tc3', 'tool_call', 200),
+      makeMsg('tr3', 'tool_result', 2_000),
+    ])
+    // New content: 200 + 3000 + 200 + 2000 = 5400 > 5000
+    // New summary = ceil(5400 / 10) = 540
+    // Total summaries: 4000 + 4000 + 540 = 8540 < 10000 → no meta-compaction
+    const result = strategy2.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+    // Should have 3 summaries, no meta-compaction
+    expect(result.newContext!.messages.length).toBe(4) // sys + 3 summaries
+  })
+
+  it('meta-compacts when accumulated summaries exceed threshold', () => {
+    const metaConfig: SimulationConfig = {
+      ...config,
+      summaryAccumulationThreshold: 5_000,
+    }
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s1', 'summary', 3_000),
+      makeMsg('s2', 'summary', 3_000),
+      makeMsg('u3', 'user', 200),
+      makeMsg('a3', 'assistant', 3_000),
+      makeMsg('tc3', 'tool_call', 200),
+      makeMsg('tr3', 'tool_result', 2_000),
+    ])
+    // New content: 5400 > 5000 → compact
+    // New summary: ceil(5400 / 10) = 540
+    // Total summaries: 3000 + 3000 + 540 = 6540 > 5000 → meta-compact
+    // Meta summary: ceil(6540 / 10) = 654
+    const result = strategy2.evaluate(context, metaConfig)
+    expect(result.shouldCompact).toBe(true)
+    // After meta-compaction: [system, meta_summary]
+    expect(result.newContext!.messages.length).toBe(2)
+    expect(result.newContext!.messages[1].tokens).toBe(654)
+    // Compacted IDs should include new content AND old summaries
+    expect(result.compactedMessageIds).toContain('s1')
+    expect(result.compactedMessageIds).toContain('s2')
+    expect(result.compactedMessageIds).toContain('u3')
+  })
+
+  it('compaction cost is based on new content only (not full context)', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s1', 'summary', 500),
+      makeMsg('u2', 'user', 200),
+      makeMsg('a2', 'assistant', 5_000),
+    ])
+    // New content: 200 + 5000 = 5200 > 5000
+    const result = strategy2.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+    // Only new content messages are in compactedMessageIds
+    const compactedIds = result.compactedMessageIds!
+    expect(compactedIds).toEqual(['u2', 'a2'])
+    // The existing summary s1 is NOT compacted (no meta-compaction needed)
+    expect(compactedIds).not.toContain('s1')
+  })
+
+  it('does not compact at exactly the interval boundary', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('a1', 'assistant', 5_000),
+    ])
+    // New content: 5000, interval = 5000 → should NOT compact (<=)
+    expect(strategy2.evaluate(context, config).shouldCompact).toBe(false)
+
+    const overContext = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('a1', 'assistant', 5_001),
+    ])
+    expect(strategy2.evaluate(overContext, config).shouldCompact).toBe(true)
+  })
+
+  it('preserves cache prefix for earlier summaries', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s1', 'summary', 500),
+      makeMsg('u2', 'user', 200),
+      makeMsg('a2', 'assistant', 5_000),
+    ])
+    const result = strategy2.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+    // After compaction: [system, s1, new_summary]
+    // s1 should be the exact same object — ID preserved
+    expect(result.newContext!.messages[1].id).toBe('s1')
+    expect(result.newContext!.messages[1].tokens).toBe(500)
   })
 })
 
