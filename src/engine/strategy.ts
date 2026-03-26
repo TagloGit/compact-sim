@@ -104,7 +104,10 @@ export const strategy2: CompactionStrategy = {
       0,
     )
 
-    if (newContentTokens <= config.incrementalInterval) {
+    const threshold = config.compactionThreshold * config.contextWindow
+    const thresholdExceeded = context.totalTokens > threshold
+
+    if (newContentTokens <= config.incrementalInterval && !thresholdExceeded) {
       return { shouldCompact: false }
     }
 

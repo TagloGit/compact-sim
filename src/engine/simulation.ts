@@ -160,11 +160,21 @@ export const runSimulation = (
           stepCost = defaultCostCalculator.calculate(
             cache,
             outputTokens,
-            { fired: compactionEvent, tokensCompacted, summaryTokens },
+            { fired: false, tokensCompacted: 0, summaryTokens: 0 },
             config,
           )
 
           previousContext = context
+        }
+
+        // Compaction cost is independent of LLM call — always add when compaction fires
+        if (compactionEvent) {
+          const compactionCost = defaultCostCalculator.calculateCompactionCost(
+            tokensCompacted,
+            summaryTokens,
+            config,
+          )
+          stepCost = addCosts(stepCost, compactionCost)
         }
 
         cumulativeCost = addCosts(cumulativeCost, stepCost)
