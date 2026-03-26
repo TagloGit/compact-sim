@@ -3,6 +3,10 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { ParameterPanel } from '@/components/controls/ParameterPanel'
 import { PlaybackControls } from '@/components/controls/PlaybackControls'
 import { ContextStack } from '@/components/visualisations/ContextStack'
+import { ContextSizeChart } from '@/components/visualisations/ContextSizeChart'
+import { CostChart } from '@/components/visualisations/CostChart'
+import { CacheHitRate } from '@/components/visualisations/CacheHitRate'
+import { CostPerStepChart } from '@/components/visualisations/CostPerStepChart'
 
 function formatCost(dollars: number): string {
   if (dollars < 0.01) return `$${dollars.toFixed(4)}`
@@ -90,6 +94,34 @@ function App() {
             snapshot={currentSnapshot}
             contextWindow={config.contextWindow}
           />
+        )}
+
+        {/* Charts: context size + cache left, cumulative cost + per-step cost right */}
+        {result && (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="flex flex-col gap-4">
+              <ContextSizeChart
+                snapshots={result.snapshots}
+                currentStep={currentStep}
+                contextWindow={config.contextWindow}
+                compactionThreshold={config.compactionThreshold}
+              />
+              <CacheHitRate
+                snapshots={result.snapshots}
+                currentStep={currentStep}
+              />
+            </div>
+            <div className="flex flex-col gap-4">
+              <CostChart
+                snapshots={result.snapshots}
+                currentStep={currentStep}
+              />
+              <CostPerStepChart
+                snapshots={result.snapshots}
+                currentStep={currentStep}
+              />
+            </div>
+          </div>
         )}
       </div>
     </AppLayout>
