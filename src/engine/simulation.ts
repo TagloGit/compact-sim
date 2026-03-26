@@ -1,26 +1,45 @@
 import { Effect } from 'effect'
 import type {
+  CacheState,
   ContextState,
+  ExternalStore,
   Message,
   SimulationConfig,
   SimulationResult,
   SimulationSnapshot,
+  StepCost,
 } from './types'
+import { EMPTY_EXTERNAL_STORE } from './types'
 import { generateConversation } from './conversation'
 import { getStrategy } from './strategy'
 import { prefixCacheModel, ZERO_CACHE } from './cache'
 import { defaultCostCalculator, ZERO_COST, addCosts } from './cost'
 
-/**
- * Determine the output tokens for a step.
- *
- * An LLM call happens when the assistant produces output — on `assistant`
- * and `reasoning` steps. `tool_result`, `tool_call`, `user`, and `system`
- * messages just get appended to context without triggering an LLM call.
- *
- * Output tokens = the message's own token count (the assistant/reasoning
- * tokens that the model generated).
- */
+// ---------------------------------------------------------------------------
+// StepState — immutable state threaded through the pipeline
+// ---------------------------------------------------------------------------
+
+export interface StepState {
+  readonly conversation: readonly Message[]
+  readonly context: ContextState
+  readonly previousContext: ContextState | null
+  readonly externalStore: ExternalStore
+  readonly compressedTokens: number
+  readonly summaryCounter: number
+  readonly cumulativeCost: StepCost
+  readonly peakContextSize: number
+  // Per-step transient fields (reset each iteration)
+  readonly compactionEvent: boolean
+  readonly tokensCompacted: number
+  readonly summaryTokens: number
+  readonly cache: CacheState
+  readonly stepCost: StepCost
+}
+
+// ---------------------------------------------------------------------------
+// Helper — LLM call detection
+// ---------------------------------------------------------------------------
+
 function getOutputTokens(message: Message): number {
   if (message.type === 'assistant' || message.type === 'reasoning') {
     return message.tokens
@@ -28,19 +47,238 @@ function getOutputTokens(message: Message): number {
   return 0
 }
 
-/**
- * Returns true if this step triggers an LLM call.
- *
- * LLM calls happen on assistant messages. Reasoning messages are part of
- * the same LLM call as the preceding assistant message (extended thinking),
- * but for cost modelling we treat them as producing output tokens on the
- * same call context.
- *
- * tool_result messages just get appended — no LLM call.
- */
 function isLlmCallStep(message: Message): boolean {
   return message.type === 'assistant' || message.type === 'reasoning'
 }
+
+// ---------------------------------------------------------------------------
+// Pipeline stage 1: ingestMessage
+// ---------------------------------------------------------------------------
+
+export function ingestMessage(
+  state: StepState,
+  rawMessage: Message,
+  config: SimulationConfig,
+): StepState {
+  const message =
+    config.toolCompressionEnabled && rawMessage.type === 'tool_result'
+      ? {
+          ...rawMessage,
+          tokens: Math.ceil(rawMessage.tokens / config.toolCompressionRatio),
+        }
+      : rawMessage
+
+  return {
+    ...state,
+    conversation: [...state.conversation, message],
+    // Reset per-step transient fields
+    compactionEvent: false,
+    tokensCompacted: 0,
+    summaryTokens: 0,
+    cache: ZERO_CACHE,
+    stepCost: ZERO_COST,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline stage 2: buildContext
+// ---------------------------------------------------------------------------
+
+export function buildContext(state: StepState): StepState {
+  const active = state.conversation.filter((m) => !m.compacted)
+  const totalTokens = active.reduce((sum, m) => sum + m.tokens, 0)
+  return {
+    ...state,
+    context: { messages: active, totalTokens },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline stage 3: evaluateCompaction
+// ---------------------------------------------------------------------------
+
+export function evaluateCompaction(
+  state: StepState,
+  config: SimulationConfig,
+): StepState {
+  const strategy = getStrategy(config.selectedStrategy)
+  const result = strategy.evaluate(state.context, config)
+
+  if (!result.shouldCompact || !result.newContext || !result.summaryMessage) {
+    return state
+  }
+
+  // Generate deterministic summary IDs for all new summaries
+  const newSummaries = result.newContext.messages.filter(
+    (m) =>
+      m.type === 'summary' &&
+      !state.context.messages.some((existing) => existing.id === m.id),
+  )
+  const summaryIdMap = new Map<string, string>()
+  let summaryCounter = state.summaryCounter
+  for (const s of newSummaries) {
+    summaryCounter++
+    summaryIdMap.set(s.id, `summary-${summaryCounter}`)
+  }
+
+  // The primary summary message (for cost and compactedInto tracking)
+  const primarySummaryId =
+    summaryIdMap.get(result.summaryMessage.id) ?? result.summaryMessage.id
+  const summaryMessage: Message = {
+    ...result.summaryMessage,
+    id: primarySummaryId,
+  }
+
+  // Calculate compaction metrics
+  const compactedIds = new Set(result.compactedMessageIds)
+  const tokensCompacted = state.context.messages
+    .filter((m) => compactedIds.has(m.id))
+    .reduce((sum, m) => sum + m.tokens, 0)
+
+  // Mark compacted messages in conversation
+  const updatedConversation = state.conversation.map((m) =>
+    compactedIds.has(m.id)
+      ? { ...m, compacted: true, compactedInto: summaryMessage.id }
+      : m,
+  )
+
+  // Add new summary messages to conversation
+  const conversationWithSummaries = [
+    ...updatedConversation,
+    ...newSummaries.map((s) => {
+      const remappedId = summaryIdMap.get(s.id) ?? s.id
+      return { ...s, id: remappedId }
+    }),
+  ]
+
+  // Build new context with remapped summary IDs
+  const newContext: ContextState = {
+    messages: result.newContext.messages.map((m) => {
+      const remappedId = summaryIdMap.get(m.id)
+      return remappedId ? { ...m, id: remappedId } : m
+    }),
+    totalTokens: result.newContext.totalTokens,
+  }
+
+  return {
+    ...state,
+    conversation: conversationWithSummaries,
+    context: newContext,
+    summaryCounter,
+    compactionEvent: true,
+    tokensCompacted,
+    summaryTokens: summaryMessage.tokens,
+    compressedTokens: state.compressedTokens + tokensCompacted,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline stage 4: updateExternalStore (no-op placeholder for V3)
+// ---------------------------------------------------------------------------
+
+export function updateExternalStore(state: StepState): StepState {
+  return state
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline stage 5: calculateCache
+// ---------------------------------------------------------------------------
+
+export function calculateCache(
+  state: StepState,
+  message: Message,
+  config: SimulationConfig,
+): StepState {
+  if (!isLlmCallStep(message)) {
+    return state
+  }
+
+  const cache = prefixCacheModel.calculate(
+    state.previousContext,
+    state.context,
+    config,
+  )
+
+  return {
+    ...state,
+    cache,
+    previousContext: state.context,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline stage 6: rollRetrieval (no-op placeholder for V3)
+// ---------------------------------------------------------------------------
+
+export function rollRetrieval(state: StepState): StepState {
+  return state
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline stage 7: calculateCost
+// ---------------------------------------------------------------------------
+
+export function calculateCost(
+  state: StepState,
+  message: Message,
+  config: SimulationConfig,
+): StepState {
+  let stepCost = ZERO_COST
+
+  if (isLlmCallStep(message)) {
+    const outputTokens = getOutputTokens(message)
+    stepCost = defaultCostCalculator.calculate(
+      state.cache,
+      outputTokens,
+      { fired: false, tokensCompacted: 0, summaryTokens: 0 },
+      config,
+    )
+  }
+
+  // Compaction cost is independent of LLM call — always add when compaction fires
+  if (state.compactionEvent) {
+    const compactionCost = defaultCostCalculator.calculateCompactionCost(
+      state.tokensCompacted,
+      state.summaryTokens,
+      config,
+    )
+    stepCost = addCosts(stepCost, compactionCost)
+  }
+
+  return {
+    ...state,
+    stepCost,
+    cumulativeCost: addCosts(state.cumulativeCost, stepCost),
+    peakContextSize: Math.max(state.peakContextSize, state.context.totalTokens),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline stage 8: buildSnapshot
+// ---------------------------------------------------------------------------
+
+export function buildSnapshot(
+  state: StepState,
+  message: Message,
+  stepIndex: number,
+): SimulationSnapshot {
+  return {
+    stepIndex,
+    message,
+    conversation: [...state.conversation],
+    context: state.context,
+    cache: state.cache,
+    cost: state.stepCost,
+    cumulativeCost: { ...state.cumulativeCost },
+    compactionEvent: state.compactionEvent,
+    externalStore: state.externalStore,
+    retrievalEvent: false,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main simulation runner
+// ---------------------------------------------------------------------------
 
 export const runSimulation = (
   config: SimulationConfig,
@@ -48,147 +286,41 @@ export const runSimulation = (
   Effect.flatMap(generateConversation(config), (allMessages) =>
     Effect.sync(() => {
       const snapshots: SimulationSnapshot[] = []
-      const conversation: Message[] = []
-      let previousContext: ContextState | null = null
-      let cumulativeCost = ZERO_COST
-      let compactionEvents = 0
-      let peakContextSize = 0
       let totalTokensGenerated = 0
-      let summaryCounter = 0
 
-      const strategy = getStrategy(config.selectedStrategy)
+      let state: StepState = {
+        conversation: [],
+        context: { messages: [], totalTokens: 0 },
+        previousContext: null,
+        externalStore: EMPTY_EXTERNAL_STORE,
+        compressedTokens: 0,
+        summaryCounter: 0,
+        cumulativeCost: ZERO_COST,
+        peakContextSize: 0,
+        // Per-step transient (reset in ingestMessage)
+        compactionEvent: false,
+        tokensCompacted: 0,
+        summaryTokens: 0,
+        cache: ZERO_CACHE,
+        stepCost: ZERO_COST,
+      }
 
       for (let i = 0; i < allMessages.length; i++) {
-        // Apply tool result compression at ingestion (zero LLM cost)
-        const raw = allMessages[i]
-        const message =
-          config.toolCompressionEnabled && raw.type === 'tool_result'
-            ? {
-                ...raw,
-                tokens: Math.ceil(raw.tokens / config.toolCompressionRatio),
-              }
-            : raw
-        conversation.push(message)
+        state = ingestMessage(state, allMessages[i], config)
+
+        // The processed message (with tool compression applied) is the last in conversation
+        const message = state.conversation[state.conversation.length - 1]
+
+        state = buildContext(state)
+        state = evaluateCompaction(state, config)
+        state = updateExternalStore(state)
+        state = calculateCache(state, message, config)
+        state = rollRetrieval(state)
+        state = calculateCost(state, message, config)
+
         totalTokensGenerated += message.tokens
 
-        // Build current context: all non-compacted messages
-        let context: ContextState = buildContext(conversation)
-
-        // Check strategy: does compaction fire?
-        let compactionEvent = false
-        let tokensCompacted = 0
-        let summaryTokens = 0
-        let summaryMessage: Message | undefined
-
-        const result = strategy.evaluate(context, config)
-        if (result.shouldCompact && result.newContext && result.summaryMessage) {
-          compactionEvent = true
-          compactionEvents++
-
-          // Generate deterministic summary IDs for all new summaries
-          // in the strategy result (replacing any temporary IDs)
-          const newSummaries = result.newContext.messages.filter(
-            (m) =>
-              m.type === 'summary' &&
-              !context.messages.some((existing) => existing.id === m.id),
-          )
-          const summaryIdMap = new Map<string, string>()
-          for (const s of newSummaries) {
-            summaryCounter++
-            summaryIdMap.set(s.id, `summary-${summaryCounter}`)
-          }
-
-          // The primary summary message (for cost and compactedInto tracking)
-          const primarySummaryId =
-            summaryIdMap.get(result.summaryMessage.id) ??
-            result.summaryMessage.id
-          summaryMessage = {
-            ...result.summaryMessage,
-            id: primarySummaryId,
-          }
-
-          // Calculate compaction cost: only the tokens that were actually compacted
-          const compactedIds = new Set(result.compactedMessageIds)
-          tokensCompacted = context.messages
-            .filter((m) => compactedIds.has(m.id))
-            .reduce((sum, m) => sum + m.tokens, 0)
-          summaryTokens = summaryMessage.tokens
-
-          // Mark compacted messages in conversation
-          for (let j = 0; j < conversation.length; j++) {
-            if (compactedIds.has(conversation[j].id)) {
-              conversation[j] = {
-                ...conversation[j],
-                compacted: true,
-                compactedInto: summaryMessage.id,
-              }
-            }
-          }
-
-          // Add new summary messages to conversation
-          for (const s of newSummaries) {
-            const remappedId = summaryIdMap.get(s.id) ?? s.id
-            conversation.push({ ...s, id: remappedId })
-          }
-
-          // Use the strategy's newContext directly, with remapped summary IDs
-          context = {
-            messages: result.newContext.messages.map((m) => {
-              const remappedId = summaryIdMap.get(m.id)
-              return remappedId ? { ...m, id: remappedId } : m
-            }),
-            totalTokens: result.newContext.totalTokens,
-          }
-        }
-
-        if (context.totalTokens > peakContextSize) {
-          peakContextSize = context.totalTokens
-        }
-
-        // Calculate cache and cost only on LLM call steps
-        let cache = ZERO_CACHE
-        let stepCost = ZERO_COST
-
-        if (isLlmCallStep(message)) {
-          cache = prefixCacheModel.calculate(
-            previousContext,
-            context,
-            config,
-          )
-
-          const outputTokens = getOutputTokens(message)
-          stepCost = defaultCostCalculator.calculate(
-            cache,
-            outputTokens,
-            { fired: false, tokensCompacted: 0, summaryTokens: 0 },
-            config,
-          )
-
-          previousContext = context
-        }
-
-        // Compaction cost is independent of LLM call — always add when compaction fires
-        if (compactionEvent) {
-          const compactionCost = defaultCostCalculator.calculateCompactionCost(
-            tokensCompacted,
-            summaryTokens,
-            config,
-          )
-          stepCost = addCosts(stepCost, compactionCost)
-        }
-
-        cumulativeCost = addCosts(cumulativeCost, stepCost)
-
-        snapshots.push({
-          stepIndex: i,
-          message,
-          conversation: [...conversation],
-          context,
-          cache,
-          cost: stepCost,
-          cumulativeCost: { ...cumulativeCost },
-          compactionEvent,
-        })
+        snapshots.push(buildSnapshot(state, message, i))
       }
 
       // Calculate average cache hit rate across LLM call steps
@@ -203,18 +335,12 @@ export const runSimulation = (
         config,
         snapshots,
         summary: {
-          totalCost: cumulativeCost.total,
+          totalCost: state.cumulativeCost.total,
           totalTokensGenerated,
-          compactionEvents,
+          compactionEvents: snapshots.filter((s) => s.compactionEvent).length,
           averageCacheHitRate,
-          peakContextSize,
+          peakContextSize: state.peakContextSize,
         },
       }
     }),
   )
-
-function buildContext(conversation: readonly Message[]): ContextState {
-  const active = conversation.filter((m) => !m.compacted)
-  const totalTokens = active.reduce((sum, m) => sum + m.tokens, 0)
-  return { messages: active, totalTokens }
-}
