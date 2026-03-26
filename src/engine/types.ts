@@ -7,6 +7,8 @@ export type MessageType =
   | 'tool_result'
   | 'summary'
 
+export type StrategyType = 'full-compaction' | 'incremental'
+
 export interface Message {
   readonly id: string
   readonly type: MessageType
@@ -16,6 +18,9 @@ export interface Message {
 }
 
 export interface SimulationConfig {
+  // Strategy selection
+  readonly selectedStrategy: StrategyType
+
   // Conversation shape
   readonly toolCallCycles: number
   readonly toolCallSize: number
@@ -30,6 +35,14 @@ export interface SimulationConfig {
   readonly contextWindow: number
   readonly compactionThreshold: number
   readonly compressionRatio: number
+
+  // Strategy 2 — Incremental compaction
+  readonly incrementalInterval: number
+  readonly summaryAccumulationThreshold: number
+
+  // Strategy 3 — Tool result compression (orthogonal)
+  readonly toolCompressionEnabled: boolean
+  readonly toolCompressionRatio: number
 
   // Pricing (per token, not per million)
   readonly baseInputPrice: number
@@ -88,6 +101,9 @@ export interface SimulationResult {
 }
 
 export const DEFAULT_CONFIG: SimulationConfig = {
+  // Strategy selection
+  selectedStrategy: 'full-compaction',
+
   // Conversation shape
   toolCallCycles: 50,
   toolCallSize: 200,
@@ -111,4 +127,12 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   minCacheableTokens: 2_048,
   compactionInputPrice: 0.80 / 1_000_000,
   compactionOutputPrice: 4.0 / 1_000_000,
+
+  // Strategy 2 — Incremental compaction
+  incrementalInterval: 30_000,
+  summaryAccumulationThreshold: 50_000,
+
+  // Strategy 3 — Tool result compression
+  toolCompressionEnabled: false,
+  toolCompressionRatio: 5,
 }

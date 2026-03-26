@@ -1,5 +1,5 @@
 import { Context } from 'effect'
-import type { ContextState, Message, SimulationConfig } from './types'
+import type { ContextState, Message, SimulationConfig, StrategyType } from './types'
 
 export interface CompactionResult {
   readonly shouldCompact: boolean
@@ -68,4 +68,20 @@ export const strategy1: CompactionStrategy = {
       summaryMessage,
     }
   },
+}
+
+/**
+ * Strategy registry — returns the compaction strategy for a given type.
+ *
+ * Both types currently return strategy1 as a placeholder.
+ * Strategy 2 implementation will be added in a follow-up issue.
+ */
+export function getStrategy(type: StrategyType): CompactionStrategy {
+  switch (type) {
+    case 'full-compaction':
+      return strategy1
+    case 'incremental':
+      // Placeholder — will be replaced with strategy2 implementation
+      return strategy1
+  }
 }
