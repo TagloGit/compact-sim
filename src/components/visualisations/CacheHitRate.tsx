@@ -18,12 +18,21 @@ interface CacheHitRateProps {
 export function CacheHitRate({ snapshots, currentStep }: CacheHitRateProps) {
   // Only show LLM call steps (assistant/reasoning) — other steps have no
   // cache calculation and would show misleading 0% values.
-  const data = snapshots
+  const llmSteps = snapshots
     .filter((s) => s.message.type === 'assistant' || s.message.type === 'reasoning')
-    .map((s) => ({
-      step: s.stepIndex,
-      hitRate: Math.round(s.cache.hitRate * 100),
-    }))
+
+  const data = llmSteps.map((s) => ({
+    step: s.stepIndex,
+    hitRate: Math.round(s.cache.hitRate * 100),
+  }))
+
+  // Snap the current-step marker to the nearest LLM step so it's always
+  // visible, even when playback is on a non-LLM step.
+  let nearestStep = data.length > 0 ? data[0].step : 0
+  for (const d of data) {
+    if (d.step <= currentStep) nearestStep = d.step
+    else break
+  }
 
   return (
     <div className="rounded-lg border border-border bg-card p-4">
@@ -59,7 +68,7 @@ export function CacheHitRate({ snapshots, currentStep }: CacheHitRateProps) {
             }}
           />
           <ReferenceLine
-            x={currentStep}
+            x={nearestStep}
             stroke="var(--foreground)"
             strokeDasharray="3 3"
             strokeWidth={1.5}
