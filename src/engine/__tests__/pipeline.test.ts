@@ -30,6 +30,7 @@ function makeState(overrides?: Partial<StepState>): StepState {
     retrievalEvent: false,
     tokensCompacted: 0,
     summaryTokens: 0,
+    pendingStoreEntries: [],
     cache: ZERO_CACHE,
     stepCost: ZERO_COST,
     ...overrides,
@@ -186,24 +187,25 @@ describe('pipeline stages', () => {
   })
 
   describe('updateExternalStore', () => {
-    it('is a no-op when no compaction event', () => {
+    it('is a no-op when no pending store entries', () => {
       const state = makeState()
       const next = updateExternalStore(state)
       expect(next).toBe(state)
     })
 
-    it('stores compacted messages in external store when compaction fires', () => {
+    it('stores entries from pendingStoreEntries in external store', () => {
       const state = makeState({
-        compactionEvent: true,
-        conversation: [
-          makeMessage('m1', 'system', 1000),
-          { ...makeMessage('m2', 'user', 5000), compacted: true, compactedInto: 'summary-1' },
-          { ...makeMessage('m3', 'assistant', 5000), compacted: true, compactedInto: 'summary-1' },
-          makeMessage('summary-1', 'summary', 500),
+        pendingStoreEntries: [
+          {
+            originalMessageIds: ['m2', 'm3'],
+            tokens: 10000,
+            level: 0,
+          },
         ],
       })
       const next = updateExternalStore(state)
       expect(next.externalStore.entries).toHaveLength(1)
+      expect(next.externalStore.entries[0].id).toBe('ext-1')
       expect(next.externalStore.entries[0].originalMessageIds).toEqual(['m2', 'm3'])
       expect(next.externalStore.entries[0].tokens).toBe(10000)
       expect(next.externalStore.totalTokens).toBe(10000)

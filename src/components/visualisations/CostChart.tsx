@@ -27,6 +27,7 @@ const COST_AREAS = [
   { key: 'uncachedInput', name: 'Uncached input', color: '#2563eb' },
   { key: 'output', name: 'Output', color: '#22c55e' },
   { key: 'compaction', name: 'Compaction', color: '#a855f7' },
+  { key: 'retrieval', name: 'Retrieval', color: '#6366f1' },
 ] as const
 
 export function CostChart({ snapshots, currentStep }: CostChartProps) {
@@ -37,6 +38,7 @@ export function CostChart({ snapshots, currentStep }: CostChartProps) {
     uncachedInput: s.cumulativeCost.uncachedInput,
     output: s.cumulativeCost.output,
     compaction: s.cumulativeCost.compactionInput + s.cumulativeCost.compactionOutput,
+    retrieval: s.cumulativeCost.retrievalInput + s.cumulativeCost.retrievalOutput,
   }))
 
   return (

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { strategy1, strategy2, getStrategy } from '../strategy'
+import { strategy1, strategy2, strategy4a, getStrategy } from '../strategy'
 import type { ContextState, Message, SimulationConfig } from '../types'
 import { DEFAULT_CONFIG } from '../types'
 
@@ -279,6 +279,132 @@ describe('strategy2', () => {
   })
 })
 
+describe('strategy4a', () => {
+  const config: SimulationConfig = {
+    ...DEFAULT_CONFIG,
+    contextWindow: 10_000,
+    compactionThreshold: 0.8,
+    incrementalInterval: 5_000,
+    summaryAccumulationThreshold: 10_000,
+    compressionRatio: 10,
+  }
+
+  it('does NOT compact when below both thresholds', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 300),
+    ])
+    const result = strategy4a.evaluate(context, config)
+    expect(result.shouldCompact).toBe(false)
+    expect(result.externalStoreEntries).toBeUndefined()
+  })
+
+  it('compacts when new content exceeds incrementalInterval', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 2_000),
+      makeMsg('tc1', 'tool_call', 200),
+      makeMsg('tr1', 'tool_result', 3_000),
+    ])
+    // New content: 200 + 2000 + 200 + 3000 = 5400 > 5000
+    const result = strategy4a.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+  })
+
+  it('compacts when main threshold exceeded before incremental interval', () => {
+    const thresholdConfig: SimulationConfig = {
+      ...config,
+      incrementalInterval: 100_000, // very high — won't trigger
+    }
+    const context = makeContext([
+      makeMsg('sys', 'system', 1_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 3_000),
+      makeMsg('tc1', 'tool_call', 200),
+      makeMsg('tr1', 'tool_result', 5_000),
+    ])
+    // 9400 tokens > 8000 threshold
+    const result = strategy4a.evaluate(context, thresholdConfig)
+    expect(result.shouldCompact).toBe(true)
+  })
+
+  it('produces externalStoreEntries on compaction', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 2_000),
+      makeMsg('tc1', 'tool_call', 200),
+      makeMsg('tr1', 'tool_result', 3_000),
+    ])
+    const result = strategy4a.evaluate(context, config)
+    expect(result.externalStoreEntries).toBeDefined()
+    expect(result.externalStoreEntries!.length).toBe(1)
+
+    const entry = result.externalStoreEntries![0]
+    expect(entry.level).toBe(0)
+    expect(entry.originalMessageIds).toEqual(['u1', 'a1', 'tc1', 'tr1'])
+    // Tokens should equal the sum of compacted messages
+    expect(entry.tokens).toBe(200 + 2_000 + 200 + 3_000)
+  })
+
+  it('external store entries match compactedMessageIds', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s1', 'summary', 500),
+      makeMsg('u2', 'user', 200),
+      makeMsg('a2', 'assistant', 2_000),
+      makeMsg('tc2', 'tool_call', 200),
+      makeMsg('tr2', 'tool_result', 3_000),
+    ])
+    const result = strategy4a.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+    const entryIds = result.externalStoreEntries![0].originalMessageIds
+    expect(entryIds).toEqual(result.compactedMessageIds)
+  })
+
+  it('compaction result context matches strategy2', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 2_000),
+      makeMsg('tc1', 'tool_call', 200),
+      makeMsg('tr1', 'tool_result', 3_000),
+    ])
+    const result4a = strategy4a.evaluate(context, config)
+    const result2 = strategy2.evaluate(context, config)
+    expect(result4a.shouldCompact).toBe(result2.shouldCompact)
+    expect(result4a.newContext!.totalTokens).toBe(result2.newContext!.totalTokens)
+    expect(result4a.compactedMessageIds).toEqual(result2.compactedMessageIds)
+  })
+
+  it('meta-compaction includes old summaries in external store entries', () => {
+    const metaConfig: SimulationConfig = {
+      ...config,
+      summaryAccumulationThreshold: 5_000,
+    }
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s1', 'summary', 3_000),
+      makeMsg('s2', 'summary', 3_000),
+      makeMsg('u3', 'user', 200),
+      makeMsg('a3', 'assistant', 3_000),
+      makeMsg('tc3', 'tool_call', 200),
+      makeMsg('tr3', 'tool_result', 2_000),
+    ])
+    const result = strategy4a.evaluate(context, metaConfig)
+    expect(result.shouldCompact).toBe(true)
+    expect(result.externalStoreEntries).toBeDefined()
+
+    const entryIds = result.externalStoreEntries![0].originalMessageIds
+    // Should include new content AND old summaries (meta-compacted)
+    expect(entryIds).toContain('s1')
+    expect(entryIds).toContain('s2')
+    expect(entryIds).toContain('u3')
+  })
+})
+
 describe('getStrategy', () => {
   it('returns a valid strategy for full-compaction', () => {
     const strategy = getStrategy('full-compaction')
@@ -288,6 +414,12 @@ describe('getStrategy', () => {
 
   it('returns a valid strategy for incremental', () => {
     const strategy = getStrategy('incremental')
+    expect(strategy).toBeDefined()
+    expect(typeof strategy.evaluate).toBe('function')
+  })
+
+  it('returns a valid strategy for lossless-append', () => {
+    const strategy = getStrategy('lossless-append')
     expect(strategy).toBeDefined()
     expect(typeof strategy.evaluate).toBe('function')
   })

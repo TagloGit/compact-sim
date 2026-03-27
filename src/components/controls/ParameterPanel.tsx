@@ -197,6 +197,7 @@ function StrategySelect({ value, onChange }: StrategySelectProps) {
         <SelectContent>
           <SelectItem value="full-compaction" className="text-xs">1 — Full compaction</SelectItem>
           <SelectItem value="incremental" className="text-xs">2 — Incremental compaction</SelectItem>
+          <SelectItem value="lossless-append" className="text-xs">4a — Lossless append-only</SelectItem>
         </SelectContent>
       </Select>
     </div>
@@ -267,7 +268,7 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
               onChange={(v) => onUpdate('selectedStrategy', v)}
             />
 
-            {config.selectedStrategy === 'incremental' && (
+            {(config.selectedStrategy === 'incremental' || config.selectedStrategy === 'lossless-append') && (
               <>
                 <SliderInput
                   label="Incremental interval (tokens)"
@@ -284,6 +285,41 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
                   max={200000}
                   step={5000}
                   onChange={(v) => onUpdate('summaryAccumulationThreshold', v)}
+                />
+              </>
+            )}
+
+            {config.selectedStrategy === 'lossless-append' && (
+              <>
+                <NumberInput
+                  label="pRetrieve max"
+                  value={config.pRetrieveMax}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  onChange={(v) => onUpdate('pRetrieveMax', v)}
+                />
+                <SliderInput
+                  label="Compressed tokens cap"
+                  value={config.compressedTokensCap}
+                  min={10000}
+                  max={500000}
+                  step={10000}
+                  onChange={(v) => onUpdate('compressedTokensCap', v)}
+                />
+                <NumberInput
+                  label="Retrieval query tokens"
+                  value={config.retrievalQueryTokens}
+                  min={100}
+                  max={5000}
+                  onChange={(v) => onUpdate('retrievalQueryTokens', v)}
+                />
+                <NumberInput
+                  label="Retrieval response tokens"
+                  value={config.retrievalResponseTokens}
+                  min={100}
+                  max={5000}
+                  onChange={(v) => onUpdate('retrievalResponseTokens', v)}
                 />
               </>
             )}
