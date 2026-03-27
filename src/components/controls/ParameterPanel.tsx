@@ -198,6 +198,7 @@ function StrategySelect({ value, onChange }: StrategySelectProps) {
           <SelectItem value="full-compaction" className="text-xs">1 — Full compaction</SelectItem>
           <SelectItem value="incremental" className="text-xs">2 — Incremental compaction</SelectItem>
           <SelectItem value="lossless-append" className="text-xs">4a — Lossless append-only</SelectItem>
+          <SelectItem value="lossless-tool-results" className="text-xs">4c — Tool-results-only lossless</SelectItem>
         </SelectContent>
       </Select>
     </div>
@@ -268,7 +269,7 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
               onChange={(v) => onUpdate('selectedStrategy', v)}
             />
 
-            {(config.selectedStrategy === 'incremental' || config.selectedStrategy === 'lossless-append') && (
+            {(config.selectedStrategy === 'incremental' || config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-tool-results') && (
               <>
                 <SliderInput
                   label="Incremental interval (tokens)"
@@ -289,7 +290,7 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
               </>
             )}
 
-            {config.selectedStrategy === 'lossless-append' && (
+            {(config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-tool-results') && (
               <>
                 <NumberInput
                   label="pRetrieve max"

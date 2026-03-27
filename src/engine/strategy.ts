@@ -13,6 +13,8 @@ export interface CompactionResult {
   readonly compactedMessageIds?: readonly string[]
   readonly summaryMessage?: Message
   readonly externalStoreEntries?: readonly ExternalStoreInput[]
+  /** When set, only this many tokens count toward retrieval probability (instead of all compacted tokens). */
+  readonly retrievalCompressedTokens?: number
 }
 
 export interface CompactionStrategy {
@@ -214,6 +216,53 @@ export const strategy4a: CompactionStrategy = {
 }
 
 /**
+ * Strategy 4c — Tool-results-only lossless compaction.
+ *
+ * Hybrid approach: general conversation is compacted using Strategy 2 logic
+ * (lossy, no external storage), but tool_result messages are stored externally
+ * before compaction. Retrieval probability is based only on the tool_result
+ * tokens that were compressed, not all compressed tokens.
+ */
+export const strategy4c: CompactionStrategy = {
+  evaluate(context, config) {
+    const result = strategy2.evaluate(context, config)
+    if (!result.shouldCompact || !result.compactedMessageIds) {
+      return result
+    }
+
+    // Find tool_result messages among those being compacted
+    const compactedIds = new Set(result.compactedMessageIds)
+    const compactedToolResults = context.messages.filter(
+      (m) => compactedIds.has(m.id) && m.type === 'tool_result',
+    )
+
+    // Only tool_result messages go to external store
+    if (compactedToolResults.length === 0) {
+      return { ...result, retrievalCompressedTokens: 0 }
+    }
+
+    const toolResultTokens = compactedToolResults.reduce(
+      (sum, m) => sum + m.tokens,
+      0,
+    )
+
+    const externalStoreEntries: ExternalStoreInput[] = [
+      {
+        originalMessageIds: compactedToolResults.map((m) => m.id),
+        tokens: toolResultTokens,
+        level: 0,
+      },
+    ]
+
+    return {
+      ...result,
+      externalStoreEntries,
+      retrievalCompressedTokens: toolResultTokens,
+    }
+  },
+}
+
+/**
  * Strategy registry — returns the compaction strategy for a given type.
  */
 export function getStrategy(type: StrategyType): CompactionStrategy {
@@ -224,5 +273,7 @@ export function getStrategy(type: StrategyType): CompactionStrategy {
       return strategy2
     case 'lossless-append':
       return strategy4a
+    case 'lossless-tool-results':
+      return strategy4c
   }
 }
