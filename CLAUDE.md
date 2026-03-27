@@ -37,6 +37,7 @@ Key modelling concepts:
 
 ## Conventions
 
+- `/code-review <pr>` — PR code review
 - Specs: `specs/`, Plans: `plans/`
 - Default branch: `main`
 - **Never use compound Bash commands** (no `&&`, `;`, or `|` chaining). Use separate Bash tool calls instead — independent calls can run in parallel. Compound commands trigger extra permission prompts.
