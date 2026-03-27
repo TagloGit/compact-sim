@@ -19,6 +19,7 @@ import {
   createRng,
   retrievalProbability,
   retrievalCost,
+  averageStoreLevel,
   type Rng,
 } from './retrieval'
 
@@ -305,7 +306,8 @@ export function calculateCost(
 
   // Retrieval cost when a retrieval event fired
   if (state.retrievalEvent) {
-    stepCost = addCosts(stepCost, retrievalCost(config))
+    const avgLevel = averageStoreLevel(state.externalStore.entries)
+    stepCost = addCosts(stepCost, retrievalCost(config, avgLevel))
   }
 
   return {

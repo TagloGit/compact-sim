@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { strategy1, strategy2, strategy4a, strategy4c, getStrategy } from '../strategy'
+import { strategy1, strategy2, strategy4a, strategy4b, strategy4c, getStrategy } from '../strategy'
 import type { ContextState, Message, SimulationConfig } from '../types'
 import { DEFAULT_CONFIG } from '../types'
 
@@ -405,6 +405,163 @@ describe('strategy4a', () => {
   })
 })
 
+describe('strategy4b', () => {
+  const config: SimulationConfig = {
+    ...DEFAULT_CONFIG,
+    contextWindow: 10_000,
+    compactionThreshold: 0.8,
+    incrementalInterval: 5_000,
+    summaryAccumulationThreshold: 10_000,
+    compressionRatio: 10,
+  }
+
+  it('does NOT compact when below both thresholds', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 300),
+    ])
+    const result = strategy4b.evaluate(context, config)
+    expect(result.shouldCompact).toBe(false)
+    expect(result.externalStoreEntries).toBeUndefined()
+  })
+
+  it('creates level 0 entries on initial compaction', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 2_000),
+      makeMsg('tc1', 'tool_call', 200),
+      makeMsg('tr1', 'tool_result', 3_000),
+    ])
+    // New content: 200 + 2000 + 200 + 3000 = 5400 > 5000
+    const result = strategy4b.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+    expect(result.externalStoreEntries).toBeDefined()
+    expect(result.externalStoreEntries!.length).toBe(1)
+
+    const entry = result.externalStoreEntries![0]
+    expect(entry.level).toBe(0)
+    expect(entry.originalMessageIds).toEqual(['u1', 'a1', 'tc1', 'tr1'])
+    expect(entry.tokens).toBe(5_400)
+  })
+
+  it('creates level 1 entries on meta-compaction', () => {
+    const metaConfig: SimulationConfig = {
+      ...config,
+      summaryAccumulationThreshold: 5_000,
+    }
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s1', 'summary', 3_000),
+      makeMsg('s2', 'summary', 3_000),
+      makeMsg('u3', 'user', 200),
+      makeMsg('a3', 'assistant', 3_000),
+      makeMsg('tc3', 'tool_call', 200),
+      makeMsg('tr3', 'tool_result', 2_000),
+    ])
+    // New content: 200 + 3000 + 200 + 2000 = 5400 > 5000 → compact
+    // New summary: ceil(5400 / 10) = 540
+    // Total summaries: 3000 + 3000 + 540 = 6540 > 5000 → meta-compact
+    const result = strategy4b.evaluate(context, metaConfig)
+    expect(result.shouldCompact).toBe(true)
+    expect(result.externalStoreEntries).toBeDefined()
+    expect(result.externalStoreEntries!.length).toBe(2)
+
+    // First entry: new content at level 0
+    expect(result.externalStoreEntries![0].level).toBe(0)
+    expect(result.externalStoreEntries![0].originalMessageIds).toEqual([
+      'u3', 'a3', 'tc3', 'tr3',
+    ])
+    expect(result.externalStoreEntries![0].tokens).toBe(5_400)
+
+    // Second entry: old summaries at level 1
+    expect(result.externalStoreEntries![1].level).toBe(1)
+    expect(result.externalStoreEntries![1].originalMessageIds).toEqual([
+      's1', 's2',
+    ])
+    expect(result.externalStoreEntries![1].tokens).toBe(6_000)
+  })
+
+  it('meta-compaction threshold respected — no meta when below', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s1', 'summary', 500),
+      makeMsg('u2', 'user', 200),
+      makeMsg('a2', 'assistant', 2_000),
+      makeMsg('tc2', 'tool_call', 200),
+      makeMsg('tr2', 'tool_result', 3_000),
+    ])
+    // New content: 5400 > 5000 → compact
+    // New summary: ceil(5400/10) = 540
+    // Total summaries: 500 + 540 = 1040 < 10000 → no meta
+    const result = strategy4b.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+    expect(result.externalStoreEntries!.length).toBe(1)
+    expect(result.externalStoreEntries![0].level).toBe(0)
+  })
+
+  it('store entries at correct levels', () => {
+    const metaConfig: SimulationConfig = {
+      ...config,
+      summaryAccumulationThreshold: 5_000,
+    }
+    const context = makeContext([
+      makeMsg('sys', 'system', 1_000),
+      makeMsg('s1', 'summary', 4_000),
+      makeMsg('s2', 'summary', 2_000),
+      makeMsg('u3', 'user', 200),
+      makeMsg('a3', 'assistant', 3_000),
+      makeMsg('tc3', 'tool_call', 200),
+      makeMsg('tr3', 'tool_result', 2_000),
+    ])
+    const result = strategy4b.evaluate(context, metaConfig)
+    // Level 0 entry has only new content
+    const l0 = result.externalStoreEntries!.filter((e) => e.level === 0)
+    const l1 = result.externalStoreEntries!.filter((e) => e.level === 1)
+    expect(l0.length).toBe(1)
+    expect(l1.length).toBe(1)
+    expect(l0[0].originalMessageIds).not.toContain('s1')
+    expect(l0[0].originalMessageIds).not.toContain('s2')
+    expect(l1[0].originalMessageIds).toContain('s1')
+    expect(l1[0].originalMessageIds).toContain('s2')
+  })
+
+  it('compaction context structure matches strategy2', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 2_000),
+      makeMsg('tc1', 'tool_call', 200),
+      makeMsg('tr1', 'tool_result', 3_000),
+    ])
+    const result4b = strategy4b.evaluate(context, config)
+    const result2 = strategy2.evaluate(context, config)
+    expect(result4b.shouldCompact).toBe(result2.shouldCompact)
+    expect(result4b.newContext!.totalTokens).toBe(result2.newContext!.totalTokens)
+    expect(result4b.compactedMessageIds).toEqual(result2.compactedMessageIds)
+  })
+
+  it('compacts when main threshold exceeded before incremental interval', () => {
+    const thresholdConfig: SimulationConfig = {
+      ...config,
+      incrementalInterval: 100_000,
+    }
+    const context = makeContext([
+      makeMsg('sys', 'system', 1_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 3_000),
+      makeMsg('tc1', 'tool_call', 200),
+      makeMsg('tr1', 'tool_result', 5_000),
+    ])
+    // 9400 > 8000 threshold
+    const result = strategy4b.evaluate(context, thresholdConfig)
+    expect(result.shouldCompact).toBe(true)
+    expect(result.externalStoreEntries!.length).toBe(1)
+    expect(result.externalStoreEntries![0].level).toBe(0)
+  })
+})
+
 describe('strategy4c', () => {
   const config: SimulationConfig = {
     ...DEFAULT_CONFIG,
@@ -533,6 +690,12 @@ describe('getStrategy', () => {
 
   it('returns a valid strategy for lossless-append', () => {
     const strategy = getStrategy('lossless-append')
+    expect(strategy).toBeDefined()
+    expect(typeof strategy.evaluate).toBe('function')
+  })
+
+  it('returns a valid strategy for lossless-hierarchical', () => {
+    const strategy = getStrategy('lossless-hierarchical')
     expect(strategy).toBeDefined()
     expect(typeof strategy.evaluate).toBe('function')
   })

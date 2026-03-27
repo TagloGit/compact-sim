@@ -34,6 +34,7 @@ function App() {
             {config.selectedStrategy === 'full-compaction' && 'Strategy 1 — Full compaction at threshold'}
             {config.selectedStrategy === 'incremental' && 'Strategy 2 — Incremental compaction at intervals'}
             {config.selectedStrategy === 'lossless-append' && 'Strategy 4a — Lossless append-only with external retrieval'}
+            {config.selectedStrategy === 'lossless-hierarchical' && 'Strategy 4b — Lossless hierarchical with levelled external retrieval'}
             {config.selectedStrategy === 'lossless-tool-results' && 'Strategy 4c — Tool-results-only lossless with external retrieval'}
             {config.toolCompressionEnabled && ' + tool result compression'}
           </p>
@@ -81,7 +82,7 @@ function App() {
               label="Final Cost"
               value={formatCost(result.summary.totalCost)}
             />
-            {(config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-tool-results') && (
+            {(config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-hierarchical' || config.selectedStrategy === 'lossless-tool-results') && (
               <>
                 <StatCard
                   label="External Store"
@@ -115,7 +116,7 @@ function App() {
         )}
 
         {/* External store visualisation (4x strategies only) */}
-        {currentSnapshot && (config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-tool-results') && (
+        {currentSnapshot && (config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-hierarchical' || config.selectedStrategy === 'lossless-tool-results') && (
           <ExternalStore
             snapshot={currentSnapshot}
             contextWindow={config.contextWindow}

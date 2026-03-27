@@ -29,8 +29,20 @@ export function ExternalStore({ snapshot, contextWindow }: ExternalStoreProps) {
   // Use the same scale as context window for visual alignment
   const totalWidthTokens = contextWindow
 
+  // Indigo shade varies by level: deeper levels get darker shades
+  const levelColors: Record<number, string> = {
+    0: 'bg-indigo-400 dark:bg-indigo-500',
+    1: 'bg-indigo-600 dark:bg-indigo-700',
+    2: 'bg-indigo-800 dark:bg-indigo-900',
+  }
+  function colorForLevel(level: number): string {
+    return levelColors[level] ?? levelColors[2]
+  }
+
+  const hasLevels = externalStore.entries.some((e) => e.level > 0)
+
   // Group entries into rows — each row holds entries up to contextWindow tokens wide
-  const rows: { id: string; tokens: number; originalMessageIds: readonly string[] }[][] = [[]]
+  const rows: { id: string; tokens: number; level: number; originalMessageIds: readonly string[] }[][] = [[]]
   let currentRowTokens = 0
   for (const entry of externalStore.entries) {
     if (currentRowTokens + entry.tokens > totalWidthTokens && currentRowTokens > 0) {
@@ -60,9 +72,9 @@ export function ExternalStore({ snapshot, contextWindow }: ExternalStoreProps) {
             return (
               <div
                 key={entry.id}
-                className="bg-indigo-400 dark:bg-indigo-500 h-full shrink-0 border-r border-background/30 last:border-r-0"
+                className={`${colorForLevel(entry.level)} h-full shrink-0 border-r border-background/30 last:border-r-0`}
                 style={{ width: `${widthPct}%` }}
-                title={`${entry.id}: ${entry.tokens.toLocaleString()} tokens (${entry.originalMessageIds.length} messages)`}
+                title={`${entry.id}: ${entry.tokens.toLocaleString()} tokens (${entry.originalMessageIds.length} messages)${entry.level > 0 ? ` — level ${entry.level}` : ''}`}
               />
             )
           })}
@@ -70,8 +82,19 @@ export function ExternalStore({ snapshot, contextWindow }: ExternalStoreProps) {
       ))}
 
       <div className="flex items-center gap-1">
-        <div className="bg-indigo-400 dark:bg-indigo-500 size-2.5 rounded-sm" />
-        <span className="text-xs text-muted-foreground">Stored content</span>
+        {hasLevels ? (
+          <>
+            <div className="bg-indigo-400 dark:bg-indigo-500 size-2.5 rounded-sm" />
+            <span className="text-xs text-muted-foreground">Level 0</span>
+            <div className="bg-indigo-600 dark:bg-indigo-700 size-2.5 rounded-sm ml-2" />
+            <span className="text-xs text-muted-foreground">Level 1</span>
+          </>
+        ) : (
+          <>
+            <div className="bg-indigo-400 dark:bg-indigo-500 size-2.5 rounded-sm" />
+            <span className="text-xs text-muted-foreground">Stored content</span>
+          </>
+        )}
         {snapshot.retrievalEvent && (
           <span className="ml-2 text-xs text-indigo-600 dark:text-indigo-400 font-medium">
             — retrieval

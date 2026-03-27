@@ -216,6 +216,131 @@ export const strategy4a: CompactionStrategy = {
 }
 
 /**
+ * Strategy 4b — Lossless hierarchical compaction.
+ *
+ * Extends 4a with hierarchical storage. Same compaction triggers as Strategy 2.
+ * On compaction, original content is stored at level 0. When accumulated
+ * summaries exceed `summaryAccumulationThreshold`, summaries are meta-compacted
+ * and stored at level 1. Retrieval cost scales with `(level + 1)`.
+ */
+export const strategy4b: CompactionStrategy = {
+  evaluate(context, config) {
+    const systemMessage = context.messages.find((m) => m.type === 'system')
+    const nonSystemMessages = context.messages.filter(
+      (m) => m.type !== 'system',
+    )
+
+    // Find the last summary — everything after it is "new content"
+    let lastSummaryIndex = -1
+    for (let i = nonSystemMessages.length - 1; i >= 0; i--) {
+      if (nonSystemMessages[i].type === 'summary') {
+        lastSummaryIndex = i
+        break
+      }
+    }
+
+    const newContentMessages = nonSystemMessages.slice(lastSummaryIndex + 1)
+    const newContentTokens = newContentMessages.reduce(
+      (sum, m) => sum + m.tokens,
+      0,
+    )
+
+    const threshold = config.compactionThreshold * config.contextWindow
+    const thresholdExceeded = context.totalTokens > threshold
+
+    if (newContentTokens <= config.incrementalInterval && !thresholdExceeded) {
+      return { shouldCompact: false }
+    }
+
+    // Compact new content into a summary
+    const summaryTokens = Math.ceil(
+      newContentTokens / config.compressionRatio,
+    )
+    const newSummary: Message = {
+      id: `summary-${Date.now()}`,
+      type: 'summary',
+      tokens: summaryTokens,
+      compacted: false,
+    }
+
+    // Store new content at level 0
+    const newContentTokensTotal = newContentMessages.reduce(
+      (sum, m) => sum + m.tokens,
+      0,
+    )
+    const externalStoreEntries: ExternalStoreInput[] = [
+      {
+        originalMessageIds: newContentMessages.map((m) => m.id),
+        tokens: newContentTokensTotal,
+        level: 0,
+      },
+    ]
+
+    // Gather all existing summaries + new one
+    const existingSummaries = nonSystemMessages.filter(
+      (m) => m.type === 'summary',
+    )
+    let allSummaries = [...existingSummaries, newSummary]
+    const totalSummaryTokens = allSummaries.reduce(
+      (sum, m) => sum + m.tokens,
+      0,
+    )
+
+    // IDs of compacted messages start with new content
+    const compactedIds = newContentMessages.map((m) => m.id)
+
+    // Meta-compaction: if accumulated summaries exceed threshold, store them at level 1
+    let primarySummary = newSummary
+    if (totalSummaryTokens > config.summaryAccumulationThreshold) {
+      const metaSummaryTokens = Math.ceil(
+        totalSummaryTokens / config.compressionRatio,
+      )
+      const metaSummary: Message = {
+        id: `summary-meta-${Date.now()}`,
+        type: 'summary',
+        tokens: metaSummaryTokens,
+        compacted: false,
+      }
+
+      // Store old summaries at level 1
+      const summaryTokensTotal = existingSummaries.reduce(
+        (sum, m) => sum + m.tokens,
+        0,
+      )
+      if (summaryTokensTotal > 0) {
+        externalStoreEntries.push({
+          originalMessageIds: existingSummaries.map((m) => m.id),
+          tokens: summaryTokensTotal,
+          level: 1,
+        })
+      }
+
+      compactedIds.push(...existingSummaries.map((m) => m.id))
+      allSummaries = [metaSummary]
+      primarySummary = metaSummary
+    }
+
+    // Build new context: [system] [summaries...]
+    const newMessages: Message[] = []
+    if (systemMessage) newMessages.push(systemMessage)
+    newMessages.push(...allSummaries)
+
+    const newContext: ContextState = {
+      messages: newMessages,
+      totalTokens: newMessages.reduce((sum, m) => sum + m.tokens, 0),
+    }
+
+    return {
+      shouldCompact: true,
+      newContext,
+      compactedMessageIds: compactedIds,
+      summaryMessage: primarySummary,
+      externalStoreEntries,
+    }
+  },
+}
+
+/**
  * Strategy 4c — Tool-results-only lossless compaction.
  *
  * Hybrid approach: general conversation is compacted using Strategy 2 logic
@@ -273,6 +398,8 @@ export function getStrategy(type: StrategyType): CompactionStrategy {
       return strategy2
     case 'lossless-append':
       return strategy4a
+    case 'lossless-hierarchical':
+      return strategy4b
     case 'lossless-tool-results':
       return strategy4c
   }
