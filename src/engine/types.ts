@@ -7,7 +7,7 @@ export type MessageType =
   | 'tool_result'
   | 'summary'
 
-export type StrategyType = 'full-compaction' | 'incremental' | 'lossless-append' | 'lossless-hierarchical' | 'lossless-tool-results'
+export type StrategyType = 'full-compaction' | 'incremental' | 'lossless-append' | 'lossless-hierarchical' | 'lossless-tool-results' | 'lcm-subagent'
 
 export interface Message {
   readonly id: string

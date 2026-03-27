@@ -200,6 +200,7 @@ function StrategySelect({ value, onChange }: StrategySelectProps) {
           <SelectItem value="lossless-append" className="text-xs">4a — Lossless append-only</SelectItem>
           <SelectItem value="lossless-hierarchical" className="text-xs">4b — Lossless hierarchical</SelectItem>
           <SelectItem value="lossless-tool-results" className="text-xs">4c — Tool-results-only lossless</SelectItem>
+          <SelectItem value="lcm-subagent" className="text-xs">4d — LCM sub-agent retrieval</SelectItem>
         </SelectContent>
       </Select>
     </div>
@@ -270,7 +271,7 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
               onChange={(v) => onUpdate('selectedStrategy', v)}
             />
 
-            {(config.selectedStrategy === 'incremental' || config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-hierarchical' || config.selectedStrategy === 'lossless-tool-results') && (
+            {(config.selectedStrategy === 'incremental' || config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-hierarchical' || config.selectedStrategy === 'lossless-tool-results' || config.selectedStrategy === 'lcm-subagent') && (
               <>
                 <SliderInput
                   label="Incremental interval (tokens)"
@@ -291,7 +292,7 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
               </>
             )}
 
-            {(config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-hierarchical' || config.selectedStrategy === 'lossless-tool-results') && (
+            {(config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-hierarchical' || config.selectedStrategy === 'lossless-tool-results' || config.selectedStrategy === 'lcm-subagent') && (
               <>
                 <NumberInput
                   label="pRetrieve max"
@@ -322,6 +323,26 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
                   min={100}
                   max={5000}
                   onChange={(v) => onUpdate('retrievalResponseTokens', v)}
+                />
+              </>
+            )}
+
+            {config.selectedStrategy === 'lcm-subagent' && (
+              <>
+                <NumberInput
+                  label="LCM grep ratio"
+                  value={config.lcmGrepRatio}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  onChange={(v) => onUpdate('lcmGrepRatio', v)}
+                />
+                <NumberInput
+                  label="LCM grep response tokens"
+                  value={config.lcmGrepResponseTokens}
+                  min={10}
+                  max={2000}
+                  onChange={(v) => onUpdate('lcmGrepResponseTokens', v)}
                 />
               </>
             )}

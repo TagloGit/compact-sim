@@ -354,6 +354,90 @@ export const strategy4c: CompactionStrategy = {
 }
 
 /**
+ * Strategy 4d — LCM sub-agent retrieval.
+ *
+ * Same triggers as Strategy 2 (incremental interval + main threshold), but
+ * every compaction replaces ALL non-system, non-summary content with a single
+ * summary — more aggressive than 4a. All compacted content goes to external
+ * store for later retrieval via dual tools (lcm_grep / lcm_expand).
+ *
+ * Context after compaction: [system] [single_summary]
+ *
+ * Retrieval cost is handled differently from other 4x strategies — see
+ * the `lcmSubagentRetrievalCost` function in retrieval.ts.
+ */
+export const strategy4d: CompactionStrategy = {
+  evaluate(context, config) {
+    const systemMessage = context.messages.find((m) => m.type === 'system')
+    const nonSystemMessages = context.messages.filter(
+      (m) => m.type !== 'system',
+    )
+
+    // Find the last summary — everything after it is "new content"
+    let lastSummaryIndex = -1
+    for (let i = nonSystemMessages.length - 1; i >= 0; i--) {
+      if (nonSystemMessages[i].type === 'summary') {
+        lastSummaryIndex = i
+        break
+      }
+    }
+
+    const newContentMessages = nonSystemMessages.slice(lastSummaryIndex + 1)
+    const newContentTokens = newContentMessages.reduce(
+      (sum, m) => sum + m.tokens,
+      0,
+    )
+
+    const threshold = config.compactionThreshold * config.contextWindow
+    const thresholdExceeded = context.totalTokens > threshold
+
+    if (newContentTokens <= config.incrementalInterval && !thresholdExceeded) {
+      return { shouldCompact: false }
+    }
+
+    // Compact ALL non-system content (including previous summaries) into one summary
+    const allNonSystemTokens = nonSystemMessages.reduce(
+      (sum, m) => sum + m.tokens,
+      0,
+    )
+    const summaryTokens = Math.ceil(allNonSystemTokens / config.compressionRatio)
+    const summaryMessage: Message = {
+      id: `summary-${Date.now()}`,
+      type: 'summary',
+      tokens: summaryTokens,
+      compacted: false,
+    }
+
+    // Store all compacted content in external store
+    const externalStoreEntries: ExternalStoreInput[] = [
+      {
+        originalMessageIds: nonSystemMessages.map((m) => m.id),
+        tokens: allNonSystemTokens,
+        level: 0,
+      },
+    ]
+
+    // Build new context: [system] [single_summary]
+    const newMessages: Message[] = []
+    if (systemMessage) newMessages.push(systemMessage)
+    newMessages.push(summaryMessage)
+
+    const newContext: ContextState = {
+      messages: newMessages,
+      totalTokens: newMessages.reduce((sum, m) => sum + m.tokens, 0),
+    }
+
+    return {
+      shouldCompact: true,
+      newContext,
+      compactedMessageIds: nonSystemMessages.map((m) => m.id),
+      summaryMessage,
+      externalStoreEntries,
+    }
+  },
+}
+
+/**
  * Strategy registry — returns the compaction strategy for a given type.
  */
 export function getStrategy(type: StrategyType): CompactionStrategy {
@@ -368,5 +452,7 @@ export function getStrategy(type: StrategyType): CompactionStrategy {
       return strategy4b
     case 'lossless-tool-results':
       return strategy4c
+    case 'lcm-subagent':
+      return strategy4d
   }
 }

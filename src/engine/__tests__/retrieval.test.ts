@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createRng, retrievalProbability, retrievalCost, averageStoreLevel } from '../retrieval'
+import { createRng, retrievalProbability, retrievalCost, lcmSubagentRetrievalCost, averageStoreLevel } from '../retrieval'
 import { DEFAULT_CONFIG } from '../types'
 
 const config = DEFAULT_CONFIG
@@ -78,6 +78,56 @@ describe('retrievalCost', () => {
     const baseCost = retrievalCost(config, 0)
     // multiplier = 1.5
     expect(cost.total).toBeCloseTo(baseCost.total * 1.5, 10)
+  })
+})
+
+describe('lcmSubagentRetrievalCost', () => {
+  it('blends grep and expand costs according to lcmGrepRatio', () => {
+    const cost = lcmSubagentRetrievalCost(config)
+
+    // grep cost: 500 * 5/1M + 100 * 25/1M = 0.0025 + 0.0025 = 0.005
+    const grepCost = 500 * (5 / 1_000_000) + 100 * (25 / 1_000_000)
+    // expand cost: (500 + 300) * 5/1M + 300 * 25/1M = 0.004 + 0.0075 = 0.0115
+    const expandCost = (500 + 300) * (5 / 1_000_000) + 300 * (25 / 1_000_000)
+    // blended: 0.70 * 0.005 + 0.30 * 0.0115 = 0.0035 + 0.00345 = 0.00695
+    const expected = 0.70 * grepCost + 0.30 * expandCost
+
+    expect(cost.total).toBeCloseTo(expected, 10)
+  })
+
+  it('total equals retrievalInput + retrievalOutput', () => {
+    const cost = lcmSubagentRetrievalCost(config)
+    expect(cost.total).toBeCloseTo(cost.retrievalInput + cost.retrievalOutput, 10)
+  })
+
+  it('other cost fields are zero', () => {
+    const cost = lcmSubagentRetrievalCost(config)
+    expect(cost.cachedInput).toBe(0)
+    expect(cost.cacheWrite).toBe(0)
+    expect(cost.uncachedInput).toBe(0)
+    expect(cost.output).toBe(0)
+    expect(cost.compactionInput).toBe(0)
+    expect(cost.compactionOutput).toBe(0)
+  })
+
+  it('with lcmGrepRatio=1.0, cost equals pure grep cost', () => {
+    const allGrepConfig = { ...config, lcmGrepRatio: 1.0 }
+    const cost = lcmSubagentRetrievalCost(allGrepConfig)
+
+    const grepInput = 500 * (5 / 1_000_000)
+    const grepOutput = 100 * (25 / 1_000_000)
+    expect(cost.retrievalInput).toBeCloseTo(grepInput, 10)
+    expect(cost.retrievalOutput).toBeCloseTo(grepOutput, 10)
+  })
+
+  it('with lcmGrepRatio=0.0, cost equals pure expand cost', () => {
+    const allExpandConfig = { ...config, lcmGrepRatio: 0.0 }
+    const cost = lcmSubagentRetrievalCost(allExpandConfig)
+
+    const expandInput = (500 + 300) * (5 / 1_000_000)
+    const expandOutput = 300 * (25 / 1_000_000)
+    expect(cost.retrievalInput).toBeCloseTo(expandInput, 10)
+    expect(cost.retrievalOutput).toBeCloseTo(expandOutput, 10)
   })
 })
 
