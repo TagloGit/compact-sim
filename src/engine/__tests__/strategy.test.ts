@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { strategy1, strategy2, strategy4a, getStrategy } from '../strategy'
+import { strategy1, strategy2, strategy4a, strategy4c, getStrategy } from '../strategy'
 import type { ContextState, Message, SimulationConfig } from '../types'
 import { DEFAULT_CONFIG } from '../types'
 
@@ -405,6 +405,119 @@ describe('strategy4a', () => {
   })
 })
 
+describe('strategy4c', () => {
+  const config: SimulationConfig = {
+    ...DEFAULT_CONFIG,
+    contextWindow: 10_000,
+    compactionThreshold: 0.8,
+    incrementalInterval: 5_000,
+    summaryAccumulationThreshold: 10_000,
+    compressionRatio: 10,
+  }
+
+  it('does NOT compact when below thresholds', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 300),
+    ])
+    const result = strategy4c.evaluate(context, config)
+    expect(result.shouldCompact).toBe(false)
+    expect(result.externalStoreEntries).toBeUndefined()
+  })
+
+  it('only stores tool_result messages in external store', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 2_000),
+      makeMsg('tc1', 'tool_call', 200),
+      makeMsg('tr1', 'tool_result', 3_000),
+    ])
+    const result = strategy4c.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+    expect(result.externalStoreEntries).toBeDefined()
+    expect(result.externalStoreEntries!.length).toBe(1)
+
+    const entry = result.externalStoreEntries![0]
+    // Only tool_result messages in external store
+    expect(entry.originalMessageIds).toEqual(['tr1'])
+    expect(entry.tokens).toBe(3_000)
+  })
+
+  it('non-tool-result messages are compacted normally (lossy)', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 2_000),
+      makeMsg('tc1', 'tool_call', 200),
+      makeMsg('tr1', 'tool_result', 3_000),
+    ])
+    const result = strategy4c.evaluate(context, config)
+    // Compacted IDs include ALL non-system messages (same as strategy 2)
+    expect(result.compactedMessageIds).toContain('u1')
+    expect(result.compactedMessageIds).toContain('a1')
+    expect(result.compactedMessageIds).toContain('tc1')
+    expect(result.compactedMessageIds).toContain('tr1')
+  })
+
+  it('retrieval compressed tokens only counts tool_result tokens', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 2_000),
+      makeMsg('tc1', 'tool_call', 200),
+      makeMsg('tr1', 'tool_result', 3_000),
+    ])
+    const result = strategy4c.evaluate(context, config)
+    expect(result.retrievalCompressedTokens).toBe(3_000)
+  })
+
+  it('compaction context matches strategy2', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 2_000),
+      makeMsg('tc1', 'tool_call', 200),
+      makeMsg('tr1', 'tool_result', 3_000),
+    ])
+    const result4c = strategy4c.evaluate(context, config)
+    const result2 = strategy2.evaluate(context, config)
+    expect(result4c.newContext!.totalTokens).toBe(result2.newContext!.totalTokens)
+    expect(result4c.compactedMessageIds).toEqual(result2.compactedMessageIds)
+  })
+
+  it('stores multiple tool_results in a single external store entry', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 1_000),
+      makeMsg('tc1', 'tool_call', 200),
+      makeMsg('tr1', 'tool_result', 2_000),
+      makeMsg('a1', 'assistant', 300),
+      makeMsg('tc2', 'tool_call', 200),
+      makeMsg('tr2', 'tool_result', 2_500),
+    ])
+    // New content: 200 + 2000 + 300 + 200 + 2500 = 5200 > 5000
+    const result = strategy4c.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+    const entry = result.externalStoreEntries![0]
+    expect(entry.originalMessageIds).toEqual(['tr1', 'tr2'])
+    expect(entry.tokens).toBe(4_500)
+  })
+
+  it('returns retrievalCompressedTokens=0 when no tool_results are compacted', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 5_000),
+    ])
+    // New content: 200 + 5000 = 5200 > 5000, but no tool_results
+    const result = strategy4c.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+    expect(result.externalStoreEntries).toBeUndefined()
+    expect(result.retrievalCompressedTokens).toBe(0)
+  })
+})
+
 describe('getStrategy', () => {
   it('returns a valid strategy for full-compaction', () => {
     const strategy = getStrategy('full-compaction')
@@ -420,6 +533,12 @@ describe('getStrategy', () => {
 
   it('returns a valid strategy for lossless-append', () => {
     const strategy = getStrategy('lossless-append')
+    expect(strategy).toBeDefined()
+    expect(typeof strategy.evaluate).toBe('function')
+  })
+
+  it('returns a valid strategy for lossless-tool-results', () => {
+    const strategy = getStrategy('lossless-tool-results')
     expect(strategy).toBeDefined()
     expect(typeof strategy.evaluate).toBe('function')
   })

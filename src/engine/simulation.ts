@@ -172,6 +172,9 @@ export function evaluateCompaction(
     totalTokens: result.newContext.totalTokens,
   }
 
+  const retrievalTokensAdded =
+    result.retrievalCompressedTokens ?? tokensCompacted
+
   return {
     ...state,
     conversation: conversationWithSummaries,
@@ -181,7 +184,7 @@ export function evaluateCompaction(
     tokensCompacted,
     summaryTokens: summaryMessage.tokens,
     pendingStoreEntries: result.externalStoreEntries ?? [],
-    compressedTokens: state.compressedTokens + tokensCompacted,
+    compressedTokens: state.compressedTokens + retrievalTokensAdded,
   }
 }
 
