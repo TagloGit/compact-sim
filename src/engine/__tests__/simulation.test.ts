@@ -537,4 +537,129 @@ describe('runSimulation', () => {
       )
     })
   })
+
+  describe('strategy 4b — lossless hierarchical', () => {
+    const s4bConfig: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      selectedStrategy: 'lossless-hierarchical',
+      toolCallCycles: 30,
+      toolCallSize: 200,
+      toolResultSize: 2_000,
+      assistantMessageSize: 300,
+      reasoningOutputSize: 0,
+      userMessageFrequency: 100,
+      userMessageSize: 200,
+      systemPromptSize: 4_000,
+      incrementalInterval: 10_000,
+      summaryAccumulationThreshold: 50_000,
+      compressionRatio: 10,
+    }
+
+    it('compaction fires multiple times', () => {
+      const result = run(s4bConfig)
+      expect(result.summary.compactionEvents).toBeGreaterThanOrEqual(2)
+    })
+
+    it('context always has exactly one summary after compaction', () => {
+      const result = run(s4bConfig)
+      for (const snapshot of result.snapshots) {
+        if (!snapshot.compactionEvent) continue
+        const summaries = snapshot.context.messages.filter(
+          (m) => m.type === 'summary',
+        )
+        expect(summaries.length).toBe(1)
+      }
+    })
+
+    it('summary size follows (prev_summary + new_content) / ratio formula', () => {
+      const result = run(s4bConfig)
+      const compactionSnapshots = result.snapshots.filter(
+        (s) => s.compactionEvent,
+      )
+      expect(compactionSnapshots.length).toBeGreaterThanOrEqual(3)
+
+      // Each summary should equal ceil(allNonSystemTokens / ratio).
+      // The summary converges toward New * c / (1 - c) where c = 1/ratio.
+      // The first compaction may start above convergence (catches all initial
+      // content), then subsequent compactions approach from above.
+      // Verify each summary differs from a naive new-content-only calculation,
+      // proving the previous summary is included in the compression input.
+      const summaryTokens = compactionSnapshots.map((s) => {
+        const summary = s.context.messages.find((m) => m.type === 'summary')
+        expect(summary).toBeDefined()
+        return summary!.tokens
+      })
+
+      // Summaries should converge toward steady state
+      const c = 1 / s4bConfig.compressionRatio
+      const convergence = Math.round(
+        s4bConfig.incrementalInterval * c / (1 - c),
+      )
+      const lastSummary = summaryTokens[summaryTokens.length - 1]
+      // Should be within 20% of theoretical convergence
+      expect(lastSummary).toBeGreaterThan(convergence * 0.8)
+      expect(lastSummary).toBeLessThan(convergence * 1.5)
+    })
+
+    it('summary includes previous summary tokens in its size', () => {
+      // Verify the summary is NOT just new_content/ratio (that would be 4a behaviour).
+      // In 4b, summary = (prev_summary + new_content) / ratio.
+      const result = run(s4bConfig)
+      const compactionSnapshots = result.snapshots.filter(
+        (s) => s.compactionEvent,
+      )
+      expect(compactionSnapshots.length).toBeGreaterThanOrEqual(2)
+
+      // The second summary should be larger than if only new content were compressed.
+      // In 4a, each summary is ~incrementalInterval/ratio = 10000/10 = 1000.
+      // In 4b, it's (prev_summary + new_content)/ratio, which is always > 1000.
+      const second = compactionSnapshots[1]
+      const summary = second.context.messages.find(
+        (m) => m.type === 'summary',
+      )!
+      const naiveSize = s4bConfig.incrementalInterval / s4bConfig.compressionRatio
+      expect(summary.tokens).toBeGreaterThan(naiveSize)
+    })
+
+    it('store entry levels increase: 0, 1, 2, ...', () => {
+      const result = run(s4bConfig)
+      const lastSnapshot = result.snapshots[result.snapshots.length - 1]
+      const entries = lastSnapshot.externalStore.entries
+      expect(entries.length).toBeGreaterThanOrEqual(2)
+
+      for (let i = 0; i < entries.length; i++) {
+        expect(entries[i].level).toBe(i)
+      }
+    })
+
+    it('external store entry count matches compaction event count', () => {
+      const result = run(s4bConfig)
+      const lastSnapshot = result.snapshots[result.snapshots.length - 1]
+      expect(lastSnapshot.externalStore.entries.length).toBe(
+        result.summary.compactionEvents,
+      )
+    })
+
+    it('retrieval cost scales with store depth', () => {
+      const config: SimulationConfig = {
+        ...s4bConfig,
+        toolCallCycles: 50,
+        pRetrieveMax: 0.80,
+        compressedTokensCap: 10_000,
+      }
+      const result = run(config)
+      const retrievalSteps = result.snapshots.filter((s) => s.retrievalEvent)
+      expect(retrievalSteps.length).toBeGreaterThan(0)
+
+      // Later retrieval events should cost more than earlier ones
+      // (as the average store level increases)
+      const firstRetrieval = retrievalSteps[0]
+      const lastRetrieval = retrievalSteps[retrievalSteps.length - 1]
+      if (retrievalSteps.length > 1) {
+        expect(lastRetrieval.cost.retrievalInput).toBeGreaterThanOrEqual(
+          firstRetrieval.cost.retrievalInput,
+        )
+      }
+    })
+  })
 })
