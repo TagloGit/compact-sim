@@ -426,7 +426,7 @@ describe('strategy4b', () => {
     expect(result.externalStoreEntries).toBeUndefined()
   })
 
-  it('creates level 0 entries on initial compaction', () => {
+  it('first compaction: stores all non-system content, context = [system, summary]', () => {
     const context = makeContext([
       makeMsg('sys', 'system', 4_000),
       makeMsg('u1', 'user', 200),
@@ -434,112 +434,82 @@ describe('strategy4b', () => {
       makeMsg('tc1', 'tool_call', 200),
       makeMsg('tr1', 'tool_result', 3_000),
     ])
-    // New content: 200 + 2000 + 200 + 3000 = 5400 > 5000
+    // New content: 5400 > 5000
     const result = strategy4b.evaluate(context, config)
     expect(result.shouldCompact).toBe(true)
-    expect(result.externalStoreEntries).toBeDefined()
+
+    // Context after: [system, summary]
+    expect(result.newContext!.messages.length).toBe(2)
+    expect(result.newContext!.messages[0].type).toBe('system')
+    expect(result.newContext!.messages[1].type).toBe('summary')
+
+    // Summary is based on ALL non-system tokens (5400)
+    expect(result.summaryMessage!.tokens).toBe(Math.ceil(5_400 / 10))
+
+    // One store entry with all non-system content
     expect(result.externalStoreEntries!.length).toBe(1)
-
-    const entry = result.externalStoreEntries![0]
-    expect(entry.level).toBe(0)
-    expect(entry.originalMessageIds).toEqual(['u1', 'a1', 'tc1', 'tr1'])
-    expect(entry.tokens).toBe(5_400)
-  })
-
-  it('creates level 1 entries on meta-compaction', () => {
-    const metaConfig: SimulationConfig = {
-      ...config,
-      summaryAccumulationThreshold: 5_000,
-    }
-    const context = makeContext([
-      makeMsg('sys', 'system', 4_000),
-      makeMsg('s1', 'summary', 3_000),
-      makeMsg('s2', 'summary', 3_000),
-      makeMsg('u3', 'user', 200),
-      makeMsg('a3', 'assistant', 3_000),
-      makeMsg('tc3', 'tool_call', 200),
-      makeMsg('tr3', 'tool_result', 2_000),
-    ])
-    // New content: 200 + 3000 + 200 + 2000 = 5400 > 5000 → compact
-    // New summary: ceil(5400 / 10) = 540
-    // Total summaries: 3000 + 3000 + 540 = 6540 > 5000 → meta-compact
-    const result = strategy4b.evaluate(context, metaConfig)
-    expect(result.shouldCompact).toBe(true)
-    expect(result.externalStoreEntries).toBeDefined()
-    expect(result.externalStoreEntries!.length).toBe(2)
-
-    // First entry: new content at level 0
-    expect(result.externalStoreEntries![0].level).toBe(0)
     expect(result.externalStoreEntries![0].originalMessageIds).toEqual([
-      'u3', 'a3', 'tc3', 'tr3',
+      'u1', 'a1', 'tc1', 'tr1',
     ])
     expect(result.externalStoreEntries![0].tokens).toBe(5_400)
-
-    // Second entry: old summaries at level 1
-    expect(result.externalStoreEntries![1].level).toBe(1)
-    expect(result.externalStoreEntries![1].originalMessageIds).toEqual([
-      's1', 's2',
-    ])
-    expect(result.externalStoreEntries![1].tokens).toBe(6_000)
   })
 
-  it('meta-compaction threshold respected — no meta when below', () => {
+  it('second compaction: stores previous summary + new content together', () => {
+    // After first compaction, context is [system, summary0, ...new messages]
     const context = makeContext([
       makeMsg('sys', 'system', 4_000),
-      makeMsg('s1', 'summary', 500),
+      makeMsg('s0', 'summary', 540),  // previous summary from first compaction
       makeMsg('u2', 'user', 200),
       makeMsg('a2', 'assistant', 2_000),
       makeMsg('tc2', 'tool_call', 200),
       makeMsg('tr2', 'tool_result', 3_000),
     ])
-    // New content: 5400 > 5000 → compact
-    // New summary: ceil(5400/10) = 540
-    // Total summaries: 500 + 540 = 1040 < 10000 → no meta
+    // New content: 200 + 2000 + 200 + 3000 = 5400 > 5000
     const result = strategy4b.evaluate(context, config)
     expect(result.shouldCompact).toBe(true)
+
+    // Context after: [system, summary] — always just one summary
+    expect(result.newContext!.messages.length).toBe(2)
+
+    // All non-system content compacted (including previous summary)
+    expect(result.compactedMessageIds).toContain('s0')
+    expect(result.compactedMessageIds).toContain('u2')
+    expect(result.compactedMessageIds).toContain('a2')
+
+    // Summary based on ALL non-system tokens: 540 + 5400 = 5940
+    expect(result.summaryMessage!.tokens).toBe(Math.ceil(5_940 / 10))
+
+    // Single store entry containing everything (summary + new content)
     expect(result.externalStoreEntries!.length).toBe(1)
-    expect(result.externalStoreEntries![0].level).toBe(0)
+    expect(result.externalStoreEntries![0].originalMessageIds).toContain('s0')
+    expect(result.externalStoreEntries![0].originalMessageIds).toContain('u2')
+    expect(result.externalStoreEntries![0].tokens).toBe(5_940)
   })
 
-  it('store entries at correct levels', () => {
-    const metaConfig: SimulationConfig = {
-      ...config,
-      summaryAccumulationThreshold: 5_000,
-    }
-    const context = makeContext([
-      makeMsg('sys', 'system', 1_000),
-      makeMsg('s1', 'summary', 4_000),
-      makeMsg('s2', 'summary', 2_000),
-      makeMsg('u3', 'user', 200),
-      makeMsg('a3', 'assistant', 3_000),
-      makeMsg('tc3', 'tool_call', 200),
-      makeMsg('tr3', 'tool_result', 2_000),
-    ])
-    const result = strategy4b.evaluate(context, metaConfig)
-    // Level 0 entry has only new content
-    const l0 = result.externalStoreEntries!.filter((e) => e.level === 0)
-    const l1 = result.externalStoreEntries!.filter((e) => e.level === 1)
-    expect(l0.length).toBe(1)
-    expect(l1.length).toBe(1)
-    expect(l0[0].originalMessageIds).not.toContain('s1')
-    expect(l0[0].originalMessageIds).not.toContain('s2')
-    expect(l1[0].originalMessageIds).toContain('s1')
-    expect(l1[0].originalMessageIds).toContain('s2')
-  })
-
-  it('compaction context structure matches strategy2', () => {
+  it('compactedMessageIds includes all non-system messages', () => {
     const context = makeContext([
       makeMsg('sys', 'system', 4_000),
-      makeMsg('u1', 'user', 200),
-      makeMsg('a1', 'assistant', 2_000),
-      makeMsg('tc1', 'tool_call', 200),
-      makeMsg('tr1', 'tool_result', 3_000),
+      makeMsg('s0', 'summary', 540),
+      makeMsg('u2', 'user', 200),
+      makeMsg('a2', 'assistant', 5_000),
     ])
-    const result4b = strategy4b.evaluate(context, config)
-    const result2 = strategy2.evaluate(context, config)
-    expect(result4b.shouldCompact).toBe(result2.shouldCompact)
-    expect(result4b.newContext!.totalTokens).toBe(result2.newContext!.totalTokens)
-    expect(result4b.compactedMessageIds).toEqual(result2.compactedMessageIds)
+    const result = strategy4b.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+    // ALL non-system messages should be in compactedMessageIds
+    expect(result.compactedMessageIds).toEqual(['s0', 'u2', 'a2'])
+  })
+
+  it('trigger is based on new content (after last summary), not total non-system', () => {
+    // Summary + small new content: should NOT trigger
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s0', 'summary', 540),
+      makeMsg('u2', 'user', 200),
+      makeMsg('a2', 'assistant', 300),
+    ])
+    // New content: 200 + 300 = 500 < 5000, total: 5040 < 8000
+    const result = strategy4b.evaluate(context, config)
+    expect(result.shouldCompact).toBe(false)
   })
 
   it('compacts when main threshold exceeded before incremental interval', () => {
@@ -557,7 +527,19 @@ describe('strategy4b', () => {
     // 9400 > 8000 threshold
     const result = strategy4b.evaluate(context, thresholdConfig)
     expect(result.shouldCompact).toBe(true)
-    expect(result.externalStoreEntries!.length).toBe(1)
+    // Still compacts everything
+    expect(result.compactedMessageIds).toEqual(['u1', 'a1', 'tc1', 'tr1'])
+  })
+
+  it('store entry level is always 0 (pipeline assigns correct level from store depth)', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s0', 'summary', 540),
+      makeMsg('u2', 'user', 200),
+      makeMsg('a2', 'assistant', 5_000),
+    ])
+    const result = strategy4b.evaluate(context, config)
+    // Strategy always emits level 0; the pipeline overrides it
     expect(result.externalStoreEntries![0].level).toBe(0)
   })
 })

@@ -218,10 +218,20 @@ export const strategy4a: CompactionStrategy = {
 /**
  * Strategy 4b — Lossless hierarchical compaction.
  *
- * Extends 4a with hierarchical storage. Same compaction triggers as Strategy 2.
- * On compaction, original content is stored at level 0. When accumulated
- * summaries exceed `summaryAccumulationThreshold`, summaries are meta-compacted
- * and stored at level 1. Retrieval cost scales with `(level + 1)`.
+ * Same triggers as Strategy 2 (incremental interval on new content + main
+ * threshold), but every compaction replaces ALL non-system content with a
+ * single summary. The previous summary + new content are stored in the
+ * external store at an increasing level each time.
+ *
+ * Context is always: [system] [single_summary]
+ *
+ * Store hierarchy:
+ * - First compaction:  raw content → store level 0, context = [system] [sum0]
+ * - Second compaction: sum0 + new → store level 1, context = [system] [sum1]
+ * - Third compaction:  sum1 + new → store level 2, context = [system] [sum2]
+ *
+ * Retrieving deep content requires traversing the chain:
+ *   sum2 → sum1 → sum0 → original. Cost scales by (level + 1).
  */
 export const strategy4b: CompactionStrategy = {
   evaluate(context, config) {
@@ -252,78 +262,34 @@ export const strategy4b: CompactionStrategy = {
       return { shouldCompact: false }
     }
 
-    // Compact new content into a summary
-    const summaryTokens = Math.ceil(
-      newContentTokens / config.compressionRatio,
+    // Compact ALL non-system content (including previous summaries) into one summary
+    const allNonSystemTokens = nonSystemMessages.reduce(
+      (sum, m) => sum + m.tokens,
+      0,
     )
-    const newSummary: Message = {
+    const summaryTokens = Math.ceil(allNonSystemTokens / config.compressionRatio)
+    const summaryMessage: Message = {
       id: `summary-${Date.now()}`,
       type: 'summary',
       tokens: summaryTokens,
       compacted: false,
     }
 
-    // Store new content at level 0
-    const newContentTokensTotal = newContentMessages.reduce(
-      (sum, m) => sum + m.tokens,
-      0,
-    )
+    // Store all compacted content as one entry.
+    // Level is set to 0 here — the pipeline's updateExternalStore assigns the
+    // correct hierarchical level based on the current store depth.
     const externalStoreEntries: ExternalStoreInput[] = [
       {
-        originalMessageIds: newContentMessages.map((m) => m.id),
-        tokens: newContentTokensTotal,
+        originalMessageIds: nonSystemMessages.map((m) => m.id),
+        tokens: allNonSystemTokens,
         level: 0,
       },
     ]
 
-    // Gather all existing summaries + new one
-    const existingSummaries = nonSystemMessages.filter(
-      (m) => m.type === 'summary',
-    )
-    let allSummaries = [...existingSummaries, newSummary]
-    const totalSummaryTokens = allSummaries.reduce(
-      (sum, m) => sum + m.tokens,
-      0,
-    )
-
-    // IDs of compacted messages start with new content
-    const compactedIds = newContentMessages.map((m) => m.id)
-
-    // Meta-compaction: if accumulated summaries exceed threshold, store them at level 1
-    let primarySummary = newSummary
-    if (totalSummaryTokens > config.summaryAccumulationThreshold) {
-      const metaSummaryTokens = Math.ceil(
-        totalSummaryTokens / config.compressionRatio,
-      )
-      const metaSummary: Message = {
-        id: `summary-meta-${Date.now()}`,
-        type: 'summary',
-        tokens: metaSummaryTokens,
-        compacted: false,
-      }
-
-      // Store old summaries at level 1
-      const summaryTokensTotal = existingSummaries.reduce(
-        (sum, m) => sum + m.tokens,
-        0,
-      )
-      if (summaryTokensTotal > 0) {
-        externalStoreEntries.push({
-          originalMessageIds: existingSummaries.map((m) => m.id),
-          tokens: summaryTokensTotal,
-          level: 1,
-        })
-      }
-
-      compactedIds.push(...existingSummaries.map((m) => m.id))
-      allSummaries = [metaSummary]
-      primarySummary = metaSummary
-    }
-
-    // Build new context: [system] [summaries...]
+    // Build new context: [system] [single_summary]
     const newMessages: Message[] = []
     if (systemMessage) newMessages.push(systemMessage)
-    newMessages.push(...allSummaries)
+    newMessages.push(summaryMessage)
 
     const newContext: ContextState = {
       messages: newMessages,
@@ -333,8 +299,8 @@ export const strategy4b: CompactionStrategy = {
     return {
       shouldCompact: true,
       newContext,
-      compactedMessageIds: compactedIds,
-      summaryMessage: primarySummary,
+      compactedMessageIds: nonSystemMessages.map((m) => m.id),
+      summaryMessage,
       externalStoreEntries,
     }
   },

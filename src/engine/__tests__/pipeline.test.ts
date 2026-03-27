@@ -189,7 +189,7 @@ describe('pipeline stages', () => {
   describe('updateExternalStore', () => {
     it('is a no-op when no pending store entries', () => {
       const state = makeState()
-      const next = updateExternalStore(state)
+      const next = updateExternalStore(state, DEFAULT_CONFIG)
       expect(next).toBe(state)
     })
 
@@ -203,12 +203,58 @@ describe('pipeline stages', () => {
           },
         ],
       })
-      const next = updateExternalStore(state)
+      const next = updateExternalStore(state, DEFAULT_CONFIG)
       expect(next.externalStore.entries).toHaveLength(1)
       expect(next.externalStore.entries[0].id).toBe('ext-1')
       expect(next.externalStore.entries[0].originalMessageIds).toEqual(['m2', 'm3'])
       expect(next.externalStore.entries[0].tokens).toBe(10000)
       expect(next.externalStore.totalTokens).toBe(10000)
+    })
+
+    it('assigns hierarchical levels based on store depth for lossless-hierarchical', () => {
+      const hierarchicalConfig = {
+        ...DEFAULT_CONFIG,
+        selectedStrategy: 'lossless-hierarchical' as const,
+      }
+
+      // First compaction: store is empty → level 0
+      const state1 = makeState({
+        pendingStoreEntries: [
+          { originalMessageIds: ['m1'], tokens: 5000, level: 0 },
+        ],
+      })
+      const next1 = updateExternalStore(state1, hierarchicalConfig)
+      expect(next1.externalStore.entries[0].level).toBe(0)
+
+      // Second compaction: store has 1 entry → level 1
+      const state2 = makeState({
+        externalStore: next1.externalStore,
+        pendingStoreEntries: [
+          { originalMessageIds: ['s0', 'm2'], tokens: 6000, level: 0 },
+        ],
+      })
+      const next2 = updateExternalStore(state2, hierarchicalConfig)
+      expect(next2.externalStore.entries[1].level).toBe(1)
+
+      // Third compaction: store has 2 entries → level 2
+      const state3 = makeState({
+        externalStore: next2.externalStore,
+        pendingStoreEntries: [
+          { originalMessageIds: ['s1', 'm3'], tokens: 7000, level: 0 },
+        ],
+      })
+      const next3 = updateExternalStore(state3, hierarchicalConfig)
+      expect(next3.externalStore.entries[2].level).toBe(2)
+    })
+
+    it('preserves strategy-provided levels for non-hierarchical strategies', () => {
+      const state = makeState({
+        pendingStoreEntries: [
+          { originalMessageIds: ['m1'], tokens: 5000, level: 0 },
+        ],
+      })
+      const next = updateExternalStore(state, DEFAULT_CONFIG)
+      expect(next.externalStore.entries[0].level).toBe(0)
     })
   })
 
