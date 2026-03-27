@@ -12,7 +12,7 @@ import type {
 } from './types'
 import { EMPTY_EXTERNAL_STORE } from './types'
 import { generateConversation } from './conversation'
-import { getStrategy } from './strategy'
+import { getStrategy, type ExternalStoreInput } from './strategy'
 import { prefixCacheModel, ZERO_CACHE } from './cache'
 import { defaultCostCalculator, ZERO_COST, addCosts } from './cost'
 import {
@@ -41,6 +41,7 @@ export interface StepState {
   readonly retrievalEvent: boolean
   readonly tokensCompacted: number
   readonly summaryTokens: number
+  readonly pendingStoreEntries: readonly ExternalStoreInput[]
   readonly cache: CacheState
   readonly stepCost: StepCost
 }
@@ -85,6 +86,7 @@ export function ingestMessage(
     retrievalEvent: false,
     tokensCompacted: 0,
     summaryTokens: 0,
+    pendingStoreEntries: [],
     cache: ZERO_CACHE,
     stepCost: ZERO_COST,
   }
@@ -178,6 +180,7 @@ export function evaluateCompaction(
     compactionEvent: true,
     tokensCompacted,
     summaryTokens: summaryMessage.tokens,
+    pendingStoreEntries: result.externalStoreEntries ?? [],
     compressedTokens: state.compressedTokens + tokensCompacted,
   }
 }
@@ -187,34 +190,29 @@ export function evaluateCompaction(
 // ---------------------------------------------------------------------------
 
 /**
- * When compaction fires, store the compacted messages in the external store.
- * This is a no-op when no compaction event occurred this step.
+ * When compaction fires and the strategy provided external store entries,
+ * add them to the store. This is a no-op for strategies that don't use
+ * external storage (Strategy 1, 2) or when no compaction occurred.
  */
 export function updateExternalStore(state: StepState): StepState {
-  if (!state.compactionEvent) return state
+  if (state.pendingStoreEntries.length === 0) return state
 
-  // Find messages that were compacted this step (compacted but not already in store)
-  const existingIds = new Set(
-    state.externalStore.entries.flatMap((e) => e.originalMessageIds),
+  const newEntries: ExternalStoreEntry[] = state.pendingStoreEntries.map(
+    (input, i) => ({
+      id: `ext-${state.externalStore.entries.length + 1 + i}`,
+      originalMessageIds: input.originalMessageIds,
+      tokens: input.tokens,
+      level: input.level,
+    }),
   )
-  const newlyCompacted = state.conversation.filter(
-    (m) => m.compacted && !existingIds.has(m.id),
-  )
 
-  if (newlyCompacted.length === 0) return state
-
-  const newEntry: ExternalStoreEntry = {
-    id: `ext-${state.externalStore.entries.length + 1}`,
-    originalMessageIds: newlyCompacted.map((m) => m.id),
-    tokens: newlyCompacted.reduce((sum, m) => sum + m.tokens, 0),
-    level: 0,
-  }
+  const addedTokens = newEntries.reduce((sum, e) => sum + e.tokens, 0)
 
   return {
     ...state,
     externalStore: {
-      entries: [...state.externalStore.entries, newEntry],
-      totalTokens: state.externalStore.totalTokens + newEntry.tokens,
+      entries: [...state.externalStore.entries, ...newEntries],
+      totalTokens: state.externalStore.totalTokens + addedTokens,
     },
   }
 }
@@ -365,6 +363,7 @@ export const runSimulation = (
         retrievalEvent: false,
         tokensCompacted: 0,
         summaryTokens: 0,
+        pendingStoreEntries: [],
         cache: ZERO_CACHE,
         stepCost: ZERO_COST,
       }

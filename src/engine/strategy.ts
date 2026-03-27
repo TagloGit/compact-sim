@@ -1,11 +1,18 @@
 import { Context } from 'effect'
 import type { ContextState, Message, SimulationConfig, StrategyType } from './types'
 
+export interface ExternalStoreInput {
+  readonly originalMessageIds: readonly string[]
+  readonly tokens: number
+  readonly level: number
+}
+
 export interface CompactionResult {
   readonly shouldCompact: boolean
   readonly newContext?: ContextState
   readonly compactedMessageIds?: readonly string[]
   readonly summaryMessage?: Message
+  readonly externalStoreEntries?: readonly ExternalStoreInput[]
 }
 
 export interface CompactionStrategy {
@@ -173,6 +180,40 @@ export const strategy2: CompactionStrategy = {
 }
 
 /**
+ * Strategy 4a — Lossless append-only compaction.
+ *
+ * Same compaction triggers and scope as Strategy 2 (incremental interval +
+ * main threshold, compact only new content since last summary). On compaction,
+ * original content is stored in the external store before being replaced by
+ * a summary, enabling later retrieval.
+ */
+export const strategy4a: CompactionStrategy = {
+  evaluate(context, config) {
+    const result = strategy2.evaluate(context, config)
+    if (!result.shouldCompact || !result.compactedMessageIds) {
+      return result
+    }
+
+    // Build external store entries from the compacted messages
+    const compactedIds = new Set(result.compactedMessageIds)
+    const compactedMessages = context.messages.filter((m) =>
+      compactedIds.has(m.id),
+    )
+    const tokens = compactedMessages.reduce((sum, m) => sum + m.tokens, 0)
+
+    const externalStoreEntries: ExternalStoreInput[] = [
+      {
+        originalMessageIds: result.compactedMessageIds,
+        tokens,
+        level: 0,
+      },
+    ]
+
+    return { ...result, externalStoreEntries }
+  },
+}
+
+/**
  * Strategy registry — returns the compaction strategy for a given type.
  */
 export function getStrategy(type: StrategyType): CompactionStrategy {
@@ -181,5 +222,7 @@ export function getStrategy(type: StrategyType): CompactionStrategy {
       return strategy1
     case 'incremental':
       return strategy2
+    case 'lossless-append':
+      return strategy4a
   }
 }

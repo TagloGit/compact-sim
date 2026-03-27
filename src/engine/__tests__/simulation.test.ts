@@ -422,4 +422,119 @@ describe('runSimulation', () => {
     expect(step2.cost.uncachedInput).toBeCloseTo(300 * 5 / 1_000_000, 10)
     expect(step2.cost.cachedInput).toBe(0)
   })
+
+  describe('strategy 4a — lossless append-only', () => {
+    const s4aConfig: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      selectedStrategy: 'lossless-append',
+      toolCallCycles: 20,
+      toolCallSize: 200,
+      toolResultSize: 2_000,
+      assistantMessageSize: 300,
+      reasoningOutputSize: 0,
+      userMessageFrequency: 100,
+      userMessageSize: 200,
+      systemPromptSize: 4_000,
+      incrementalInterval: 10_000,
+      summaryAccumulationThreshold: 50_000,
+      compressionRatio: 10,
+    }
+
+    it('compaction fires at correct intervals', () => {
+      const result = run(s4aConfig)
+      expect(result.summary.compactionEvents).toBeGreaterThanOrEqual(2)
+    })
+
+    it('external store is populated on compaction', () => {
+      const result = run(s4aConfig)
+      const lastSnapshot = result.snapshots[result.snapshots.length - 1]
+      expect(lastSnapshot.externalStore.entries.length).toBeGreaterThan(0)
+      expect(lastSnapshot.externalStore.totalTokens).toBeGreaterThan(0)
+    })
+
+    it('external store grows monotonically', () => {
+      const result = run(s4aConfig)
+      let prevEntries = 0
+      let prevTokens = 0
+      for (const snapshot of result.snapshots) {
+        expect(snapshot.externalStore.entries.length).toBeGreaterThanOrEqual(prevEntries)
+        expect(snapshot.externalStore.totalTokens).toBeGreaterThanOrEqual(prevTokens)
+        prevEntries = snapshot.externalStore.entries.length
+        prevTokens = snapshot.externalStore.totalTokens
+      }
+    })
+
+    it('store entries have level 0', () => {
+      const result = run(s4aConfig)
+      const lastSnapshot = result.snapshots[result.snapshots.length - 1]
+      for (const entry of lastSnapshot.externalStore.entries) {
+        expect(entry.level).toBe(0)
+      }
+    })
+
+    it('retrieval events fire after store has entries', () => {
+      // Use high pRetrieveMax to ensure retrieval fires with enough compaction
+      const config: SimulationConfig = {
+        ...s4aConfig,
+        toolCallCycles: 50,
+        pRetrieveMax: 0.80,
+        compressedTokensCap: 10_000,
+      }
+      const result = run(config)
+      const retrievalSteps = result.snapshots.filter((s) => s.retrievalEvent)
+      expect(retrievalSteps.length).toBeGreaterThan(0)
+
+      // All retrieval events should be on LLM call steps
+      for (const step of retrievalSteps) {
+        expect(
+          step.message.type === 'assistant' || step.message.type === 'reasoning',
+        ).toBe(true)
+      }
+    })
+
+    it('retrieval cost appears in step cost when retrieval fires', () => {
+      const config: SimulationConfig = {
+        ...s4aConfig,
+        toolCallCycles: 50,
+        pRetrieveMax: 0.80,
+        compressedTokensCap: 10_000,
+      }
+      const result = run(config)
+      const retrievalStep = result.snapshots.find((s) => s.retrievalEvent)
+      if (retrievalStep) {
+        expect(retrievalStep.cost.retrievalInput).toBeGreaterThan(0)
+        expect(retrievalStep.cost.retrievalOutput).toBeGreaterThan(0)
+      }
+    })
+
+    it('strategies 1 and 2 do NOT populate external store', () => {
+      const s1Config: SimulationConfig = {
+        ...DEFAULT_CONFIG,
+        selectedStrategy: 'full-compaction',
+        toolCallCycles: 10,
+        toolCallSize: 200,
+        toolResultSize: 2_000,
+        assistantMessageSize: 300,
+        reasoningOutputSize: 0,
+        userMessageFrequency: 100,
+        systemPromptSize: 1_000,
+        contextWindow: 5_000,
+        compactionThreshold: 0.8,
+        compressionRatio: 10,
+      }
+      const result = run(s1Config)
+      expect(result.summary.compactionEvents).toBeGreaterThan(0)
+      const lastSnapshot = result.snapshots[result.snapshots.length - 1]
+      expect(lastSnapshot.externalStore.entries.length).toBe(0)
+    })
+
+    it('external store entry count matches compaction event count', () => {
+      // With no meta-compaction, each compaction should produce exactly one store entry
+      const result = run(s4aConfig)
+      const lastSnapshot = result.snapshots[result.snapshots.length - 1]
+      expect(lastSnapshot.externalStore.entries.length).toBe(
+        result.summary.compactionEvents,
+      )
+    })
+  })
 })
