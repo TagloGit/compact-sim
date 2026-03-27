@@ -7,6 +7,7 @@ import { ContextSizeChart } from '@/components/visualisations/ContextSizeChart'
 import { CostChart } from '@/components/visualisations/CostChart'
 import { CacheHitRate } from '@/components/visualisations/CacheHitRate'
 import { CostPerStepChart } from '@/components/visualisations/CostPerStepChart'
+import { ExternalStore } from '@/components/visualisations/ExternalStore'
 
 function formatCost(dollars: number): string {
   if (dollars < 0.01) return `$${dollars.toFixed(4)}`
@@ -30,9 +31,9 @@ function App() {
         <div>
           <h1 className="text-xl font-semibold">Compaction Simulator</h1>
           <p className="text-sm text-muted-foreground">
-            {config.selectedStrategy === 'full-compaction'
-              ? 'Strategy 1 — Full compaction at threshold'
-              : 'Strategy 2 — Incremental compaction at intervals'}
+            {config.selectedStrategy === 'full-compaction' && 'Strategy 1 — Full compaction at threshold'}
+            {config.selectedStrategy === 'incremental' && 'Strategy 2 — Incremental compaction at intervals'}
+            {config.selectedStrategy === 'lossless-append' && 'Strategy 4a — Lossless append-only with external retrieval'}
             {config.toolCompressionEnabled && ' + tool result compression'}
           </p>
         </div>
@@ -79,6 +80,19 @@ function App() {
               label="Final Cost"
               value={formatCost(result.summary.totalCost)}
             />
+            {config.selectedStrategy === 'lossless-append' && (
+              <>
+                <StatCard
+                  label="External Store"
+                  value={formatTokens(result.snapshots[result.snapshots.length - 1].externalStore.totalTokens)}
+                  sub={`${result.snapshots[result.snapshots.length - 1].externalStore.entries.length} entries`}
+                />
+                <StatCard
+                  label="Retrieval Events"
+                  value={String(result.snapshots.filter((s) => s.retrievalEvent).length)}
+                />
+              </>
+            )}
           </div>
         )}
 
@@ -94,6 +108,14 @@ function App() {
         {/* Context stack visualisation */}
         {currentSnapshot && (
           <ContextStack
+            snapshot={currentSnapshot}
+            contextWindow={config.contextWindow}
+          />
+        )}
+
+        {/* External store visualisation (4x strategies only) */}
+        {currentSnapshot && config.selectedStrategy === 'lossless-append' && (
+          <ExternalStore
             snapshot={currentSnapshot}
             contextWindow={config.contextWindow}
           />
