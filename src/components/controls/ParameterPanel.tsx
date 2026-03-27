@@ -435,8 +435,9 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
             <SliderInput
               label="Compression ratio (X:1)"
               value={config.compressionRatio}
-              min={2}
+              min={1.1}
               max={50}
+              step={0.1}
               onChange={(v) => onUpdate('compressionRatio', v)}
             />
           </div>
