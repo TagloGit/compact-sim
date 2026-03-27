@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { ChevronRight } from 'lucide-react'
 import type { SimulationSnapshot } from '@/engine/types'
 
 interface ExternalStoreProps {
@@ -12,18 +14,31 @@ function formatTokens(tokens: number): string {
 }
 
 export function ExternalStore({ snapshot, contextWindow }: ExternalStoreProps) {
+  const [open, setOpen] = useState(false)
   const { externalStore } = snapshot
 
-  if (externalStore.entries.length === 0) {
-    return (
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-sm">
-          <span className="font-medium">External Store</span>
-          <span className="tabular-nums text-muted-foreground">empty</span>
-        </div>
-        <div className="relative h-6 w-full rounded bg-muted overflow-hidden" />
-      </div>
-    )
+  const isEmpty = externalStore.entries.length === 0
+  const summaryText = isEmpty
+    ? 'empty'
+    : `${formatTokens(externalStore.totalTokens)} tokens \u00b7 ${externalStore.entries.length} ${externalStore.entries.length === 1 ? 'entry' : 'entries'}`
+
+  // Header — always visible, acts as toggle
+  const header = (
+    <button
+      type="button"
+      onClick={() => setOpen((v) => !v)}
+      className="flex w-full items-center justify-between text-sm cursor-pointer"
+    >
+      <span className="flex items-center gap-1.5 font-medium">
+        <ChevronRight className={`size-3.5 transition-transform ${open ? 'rotate-90' : ''}`} />
+        External Store
+      </span>
+      <span className="tabular-nums text-muted-foreground">{summaryText}</span>
+    </button>
+  )
+
+  if (isEmpty || !open) {
+    return <div className="space-y-1.5">{header}</div>
   }
 
   // Use the same scale as context window for visual alignment
@@ -55,12 +70,7 @@ export function ExternalStore({ snapshot, contextWindow }: ExternalStoreProps) {
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-sm">
-        <span className="font-medium">External Store</span>
-        <span className="tabular-nums text-muted-foreground">
-          {formatTokens(externalStore.totalTokens)} tokens &middot; {externalStore.entries.length} {externalStore.entries.length === 1 ? 'entry' : 'entries'}
-        </span>
-      </div>
+      {header}
 
       {rows.map((row, rowIndex) => (
         <div
