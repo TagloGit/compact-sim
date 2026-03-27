@@ -198,6 +198,7 @@ function StrategySelect({ value, onChange }: StrategySelectProps) {
           <SelectItem value="full-compaction" className="text-xs">1 — Full compaction</SelectItem>
           <SelectItem value="incremental" className="text-xs">2 — Incremental compaction</SelectItem>
           <SelectItem value="lossless-append" className="text-xs">4a — Lossless append-only</SelectItem>
+          <SelectItem value="lossless-hierarchical" className="text-xs">4b — Lossless hierarchical</SelectItem>
           <SelectItem value="lossless-tool-results" className="text-xs">4c — Tool-results-only lossless</SelectItem>
         </SelectContent>
       </Select>
@@ -269,7 +270,7 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
               onChange={(v) => onUpdate('selectedStrategy', v)}
             />
 
-            {(config.selectedStrategy === 'incremental' || config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-tool-results') && (
+            {(config.selectedStrategy === 'incremental' || config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-hierarchical' || config.selectedStrategy === 'lossless-tool-results') && (
               <>
                 <SliderInput
                   label="Incremental interval (tokens)"
@@ -290,7 +291,7 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
               </>
             )}
 
-            {(config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-tool-results') && (
+            {(config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-hierarchical' || config.selectedStrategy === 'lossless-tool-results') && (
               <>
                 <NumberInput
                   label="pRetrieve max"
@@ -434,8 +435,9 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
             <SliderInput
               label="Compression ratio (X:1)"
               value={config.compressionRatio}
-              min={2}
+              min={1.1}
               max={50}
+              step={0.1}
               onChange={(v) => onUpdate('compressionRatio', v)}
             />
           </div>

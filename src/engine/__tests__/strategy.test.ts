@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { strategy1, strategy2, strategy4a, strategy4c, getStrategy } from '../strategy'
+import { strategy1, strategy2, strategy4a, strategy4b, strategy4c, getStrategy } from '../strategy'
 import type { ContextState, Message, SimulationConfig } from '../types'
 import { DEFAULT_CONFIG } from '../types'
 
@@ -405,6 +405,145 @@ describe('strategy4a', () => {
   })
 })
 
+describe('strategy4b', () => {
+  const config: SimulationConfig = {
+    ...DEFAULT_CONFIG,
+    contextWindow: 10_000,
+    compactionThreshold: 0.8,
+    incrementalInterval: 5_000,
+    summaryAccumulationThreshold: 10_000,
+    compressionRatio: 10,
+  }
+
+  it('does NOT compact when below both thresholds', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 300),
+    ])
+    const result = strategy4b.evaluate(context, config)
+    expect(result.shouldCompact).toBe(false)
+    expect(result.externalStoreEntries).toBeUndefined()
+  })
+
+  it('first compaction: stores all non-system content, context = [system, summary]', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 2_000),
+      makeMsg('tc1', 'tool_call', 200),
+      makeMsg('tr1', 'tool_result', 3_000),
+    ])
+    // New content: 5400 > 5000
+    const result = strategy4b.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+
+    // Context after: [system, summary]
+    expect(result.newContext!.messages.length).toBe(2)
+    expect(result.newContext!.messages[0].type).toBe('system')
+    expect(result.newContext!.messages[1].type).toBe('summary')
+
+    // Summary is based on ALL non-system tokens (5400)
+    expect(result.summaryMessage!.tokens).toBe(Math.ceil(5_400 / 10))
+
+    // One store entry with all non-system content
+    expect(result.externalStoreEntries!.length).toBe(1)
+    expect(result.externalStoreEntries![0].originalMessageIds).toEqual([
+      'u1', 'a1', 'tc1', 'tr1',
+    ])
+    expect(result.externalStoreEntries![0].tokens).toBe(5_400)
+  })
+
+  it('second compaction: stores previous summary + new content together', () => {
+    // After first compaction, context is [system, summary0, ...new messages]
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s0', 'summary', 540),  // previous summary from first compaction
+      makeMsg('u2', 'user', 200),
+      makeMsg('a2', 'assistant', 2_000),
+      makeMsg('tc2', 'tool_call', 200),
+      makeMsg('tr2', 'tool_result', 3_000),
+    ])
+    // New content: 200 + 2000 + 200 + 3000 = 5400 > 5000
+    const result = strategy4b.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+
+    // Context after: [system, summary] — always just one summary
+    expect(result.newContext!.messages.length).toBe(2)
+
+    // All non-system content compacted (including previous summary)
+    expect(result.compactedMessageIds).toContain('s0')
+    expect(result.compactedMessageIds).toContain('u2')
+    expect(result.compactedMessageIds).toContain('a2')
+
+    // Summary based on ALL non-system tokens: 540 + 5400 = 5940
+    expect(result.summaryMessage!.tokens).toBe(Math.ceil(5_940 / 10))
+
+    // Single store entry containing everything (summary + new content)
+    expect(result.externalStoreEntries!.length).toBe(1)
+    expect(result.externalStoreEntries![0].originalMessageIds).toContain('s0')
+    expect(result.externalStoreEntries![0].originalMessageIds).toContain('u2')
+    expect(result.externalStoreEntries![0].tokens).toBe(5_940)
+  })
+
+  it('compactedMessageIds includes all non-system messages', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s0', 'summary', 540),
+      makeMsg('u2', 'user', 200),
+      makeMsg('a2', 'assistant', 5_000),
+    ])
+    const result = strategy4b.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+    // ALL non-system messages should be in compactedMessageIds
+    expect(result.compactedMessageIds).toEqual(['s0', 'u2', 'a2'])
+  })
+
+  it('trigger is based on new content (after last summary), not total non-system', () => {
+    // Summary + small new content: should NOT trigger
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s0', 'summary', 540),
+      makeMsg('u2', 'user', 200),
+      makeMsg('a2', 'assistant', 300),
+    ])
+    // New content: 200 + 300 = 500 < 5000, total: 5040 < 8000
+    const result = strategy4b.evaluate(context, config)
+    expect(result.shouldCompact).toBe(false)
+  })
+
+  it('compacts when main threshold exceeded before incremental interval', () => {
+    const thresholdConfig: SimulationConfig = {
+      ...config,
+      incrementalInterval: 100_000,
+    }
+    const context = makeContext([
+      makeMsg('sys', 'system', 1_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 3_000),
+      makeMsg('tc1', 'tool_call', 200),
+      makeMsg('tr1', 'tool_result', 5_000),
+    ])
+    // 9400 > 8000 threshold
+    const result = strategy4b.evaluate(context, thresholdConfig)
+    expect(result.shouldCompact).toBe(true)
+    // Still compacts everything
+    expect(result.compactedMessageIds).toEqual(['u1', 'a1', 'tc1', 'tr1'])
+  })
+
+  it('store entry level is always 0 (pipeline assigns correct level from store depth)', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s0', 'summary', 540),
+      makeMsg('u2', 'user', 200),
+      makeMsg('a2', 'assistant', 5_000),
+    ])
+    const result = strategy4b.evaluate(context, config)
+    // Strategy always emits level 0; the pipeline overrides it
+    expect(result.externalStoreEntries![0].level).toBe(0)
+  })
+})
+
 describe('strategy4c', () => {
   const config: SimulationConfig = {
     ...DEFAULT_CONFIG,
@@ -533,6 +672,12 @@ describe('getStrategy', () => {
 
   it('returns a valid strategy for lossless-append', () => {
     const strategy = getStrategy('lossless-append')
+    expect(strategy).toBeDefined()
+    expect(typeof strategy.evaluate).toBe('function')
+  })
+
+  it('returns a valid strategy for lossless-hierarchical', () => {
+    const strategy = getStrategy('lossless-hierarchical')
     expect(strategy).toBeDefined()
     expect(typeof strategy.evaluate).toBe('function')
   })

@@ -19,6 +19,7 @@ import {
   createRng,
   retrievalProbability,
   retrievalCost,
+  averageStoreLevel,
   type Rng,
 } from './retrieval'
 
@@ -196,16 +197,28 @@ export function evaluateCompaction(
  * When compaction fires and the strategy provided external store entries,
  * add them to the store. This is a no-op for strategies that don't use
  * external storage (Strategy 1, 2) or when no compaction occurred.
+ *
+ * For the lossless-hierarchical strategy (4b), each compaction adds exactly
+ * one entry at an increasing level: first compaction → level 0, second → level 1,
+ * etc. The strategy sets level 0 as a placeholder; we override with the correct
+ * level based on the current store depth.
  */
-export function updateExternalStore(state: StepState): StepState {
+export function updateExternalStore(
+  state: StepState,
+  config: SimulationConfig,
+): StepState {
   if (state.pendingStoreEntries.length === 0) return state
+
+  const isHierarchical = config.selectedStrategy === 'lossless-hierarchical'
 
   const newEntries: ExternalStoreEntry[] = state.pendingStoreEntries.map(
     (input, i) => ({
       id: `ext-${state.externalStore.entries.length + 1 + i}`,
       originalMessageIds: input.originalMessageIds,
       tokens: input.tokens,
-      level: input.level,
+      level: isHierarchical
+        ? state.externalStore.entries.length + i
+        : input.level,
     }),
   )
 
@@ -305,7 +318,8 @@ export function calculateCost(
 
   // Retrieval cost when a retrieval event fired
   if (state.retrievalEvent) {
-    stepCost = addCosts(stepCost, retrievalCost(config))
+    const avgLevel = averageStoreLevel(state.externalStore.entries)
+    stepCost = addCosts(stepCost, retrievalCost(config, avgLevel))
   }
 
   return {
@@ -379,7 +393,7 @@ export const runSimulation = (
 
         state = buildContext(state)
         state = evaluateCompaction(state, config)
-        state = updateExternalStore(state)
+        state = updateExternalStore(state, config)
         state = calculateCache(state, message, config)
         state = rollRetrieval(state, message, config)
         state = calculateCost(state, message, config)

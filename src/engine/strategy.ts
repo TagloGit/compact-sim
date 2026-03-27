@@ -216,6 +216,97 @@ export const strategy4a: CompactionStrategy = {
 }
 
 /**
+ * Strategy 4b — Lossless hierarchical compaction.
+ *
+ * Same triggers as Strategy 2 (incremental interval on new content + main
+ * threshold), but every compaction replaces ALL non-system content with a
+ * single summary. The previous summary + new content are stored in the
+ * external store at an increasing level each time.
+ *
+ * Context is always: [system] [single_summary]
+ *
+ * Store hierarchy:
+ * - First compaction:  raw content → store level 0, context = [system] [sum0]
+ * - Second compaction: sum0 + new → store level 1, context = [system] [sum1]
+ * - Third compaction:  sum1 + new → store level 2, context = [system] [sum2]
+ *
+ * Retrieving deep content requires traversing the chain:
+ *   sum2 → sum1 → sum0 → original. Cost scales by (level + 1).
+ */
+export const strategy4b: CompactionStrategy = {
+  evaluate(context, config) {
+    const systemMessage = context.messages.find((m) => m.type === 'system')
+    const nonSystemMessages = context.messages.filter(
+      (m) => m.type !== 'system',
+    )
+
+    // Find the last summary — everything after it is "new content"
+    let lastSummaryIndex = -1
+    for (let i = nonSystemMessages.length - 1; i >= 0; i--) {
+      if (nonSystemMessages[i].type === 'summary') {
+        lastSummaryIndex = i
+        break
+      }
+    }
+
+    const newContentMessages = nonSystemMessages.slice(lastSummaryIndex + 1)
+    const newContentTokens = newContentMessages.reduce(
+      (sum, m) => sum + m.tokens,
+      0,
+    )
+
+    const threshold = config.compactionThreshold * config.contextWindow
+    const thresholdExceeded = context.totalTokens > threshold
+
+    if (newContentTokens <= config.incrementalInterval && !thresholdExceeded) {
+      return { shouldCompact: false }
+    }
+
+    // Compact ALL non-system content (including previous summaries) into one summary
+    const allNonSystemTokens = nonSystemMessages.reduce(
+      (sum, m) => sum + m.tokens,
+      0,
+    )
+    const summaryTokens = Math.ceil(allNonSystemTokens / config.compressionRatio)
+    const summaryMessage: Message = {
+      id: `summary-${Date.now()}`,
+      type: 'summary',
+      tokens: summaryTokens,
+      compacted: false,
+    }
+
+    // Store all compacted content as one entry.
+    // Level is set to 0 here — the pipeline's updateExternalStore assigns the
+    // correct hierarchical level based on the current store depth.
+    const externalStoreEntries: ExternalStoreInput[] = [
+      {
+        originalMessageIds: nonSystemMessages.map((m) => m.id),
+        tokens: allNonSystemTokens,
+        level: 0,
+      },
+    ]
+
+    // Build new context: [system] [single_summary]
+    const newMessages: Message[] = []
+    if (systemMessage) newMessages.push(systemMessage)
+    newMessages.push(summaryMessage)
+
+    const newContext: ContextState = {
+      messages: newMessages,
+      totalTokens: newMessages.reduce((sum, m) => sum + m.tokens, 0),
+    }
+
+    return {
+      shouldCompact: true,
+      newContext,
+      compactedMessageIds: nonSystemMessages.map((m) => m.id),
+      summaryMessage,
+      externalStoreEntries,
+    }
+  },
+}
+
+/**
  * Strategy 4c — Tool-results-only lossless compaction.
  *
  * Hybrid approach: general conversation is compacted using Strategy 2 logic
@@ -273,6 +364,8 @@ export function getStrategy(type: StrategyType): CompactionStrategy {
       return strategy2
     case 'lossless-append':
       return strategy4a
+    case 'lossless-hierarchical':
+      return strategy4b
     case 'lossless-tool-results':
       return strategy4c
   }

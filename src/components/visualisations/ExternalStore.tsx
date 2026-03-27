@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { ChevronRight } from 'lucide-react'
 import type { SimulationSnapshot } from '@/engine/types'
 
 interface ExternalStoreProps {
@@ -12,25 +14,50 @@ function formatTokens(tokens: number): string {
 }
 
 export function ExternalStore({ snapshot, contextWindow }: ExternalStoreProps) {
+  const [open, setOpen] = useState(false)
   const { externalStore } = snapshot
 
-  if (externalStore.entries.length === 0) {
-    return (
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-sm">
-          <span className="font-medium">External Store</span>
-          <span className="tabular-nums text-muted-foreground">empty</span>
-        </div>
-        <div className="relative h-6 w-full rounded bg-muted overflow-hidden" />
-      </div>
-    )
+  const isEmpty = externalStore.entries.length === 0
+  const summaryText = isEmpty
+    ? 'empty'
+    : `${formatTokens(externalStore.totalTokens)} tokens \u00b7 ${externalStore.entries.length} ${externalStore.entries.length === 1 ? 'entry' : 'entries'}`
+
+  // Header — always visible, acts as toggle
+  const header = (
+    <button
+      type="button"
+      onClick={() => setOpen((v) => !v)}
+      className="flex w-full items-center justify-between text-sm cursor-pointer"
+    >
+      <span className="flex items-center gap-1.5 font-medium">
+        <ChevronRight className={`size-3.5 transition-transform ${open ? 'rotate-90' : ''}`} />
+        External Store
+      </span>
+      <span className="tabular-nums text-muted-foreground">{summaryText}</span>
+    </button>
+  )
+
+  if (isEmpty || !open) {
+    return <div className="space-y-1.5">{header}</div>
   }
 
   // Use the same scale as context window for visual alignment
   const totalWidthTokens = contextWindow
 
+  // Indigo shade varies by level: deeper levels get darker shades
+  const levelColors: Record<number, string> = {
+    0: 'bg-indigo-400 dark:bg-indigo-500',
+    1: 'bg-indigo-600 dark:bg-indigo-700',
+    2: 'bg-indigo-800 dark:bg-indigo-900',
+  }
+  function colorForLevel(level: number): string {
+    return levelColors[level] ?? levelColors[2]
+  }
+
+  const hasLevels = externalStore.entries.some((e) => e.level > 0)
+
   // Group entries into rows — each row holds entries up to contextWindow tokens wide
-  const rows: { id: string; tokens: number; originalMessageIds: readonly string[] }[][] = [[]]
+  const rows: { id: string; tokens: number; level: number; originalMessageIds: readonly string[] }[][] = [[]]
   let currentRowTokens = 0
   for (const entry of externalStore.entries) {
     if (currentRowTokens + entry.tokens > totalWidthTokens && currentRowTokens > 0) {
@@ -43,12 +70,7 @@ export function ExternalStore({ snapshot, contextWindow }: ExternalStoreProps) {
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-sm">
-        <span className="font-medium">External Store</span>
-        <span className="tabular-nums text-muted-foreground">
-          {formatTokens(externalStore.totalTokens)} tokens &middot; {externalStore.entries.length} {externalStore.entries.length === 1 ? 'entry' : 'entries'}
-        </span>
-      </div>
+      {header}
 
       {rows.map((row, rowIndex) => (
         <div
@@ -60,9 +82,9 @@ export function ExternalStore({ snapshot, contextWindow }: ExternalStoreProps) {
             return (
               <div
                 key={entry.id}
-                className="bg-indigo-400 dark:bg-indigo-500 h-full shrink-0 border-r border-background/30 last:border-r-0"
+                className={`${colorForLevel(entry.level)} h-full shrink-0 border-r border-background/30 last:border-r-0`}
                 style={{ width: `${widthPct}%` }}
-                title={`${entry.id}: ${entry.tokens.toLocaleString()} tokens (${entry.originalMessageIds.length} messages)`}
+                title={`${entry.id}: ${entry.tokens.toLocaleString()} tokens (${entry.originalMessageIds.length} messages)${entry.level > 0 ? ` — level ${entry.level}` : ''}`}
               />
             )
           })}
@@ -70,8 +92,19 @@ export function ExternalStore({ snapshot, contextWindow }: ExternalStoreProps) {
       ))}
 
       <div className="flex items-center gap-1">
-        <div className="bg-indigo-400 dark:bg-indigo-500 size-2.5 rounded-sm" />
-        <span className="text-xs text-muted-foreground">Stored content</span>
+        {hasLevels ? (
+          <>
+            <div className="bg-indigo-400 dark:bg-indigo-500 size-2.5 rounded-sm" />
+            <span className="text-xs text-muted-foreground">Level 0</span>
+            <div className="bg-indigo-600 dark:bg-indigo-700 size-2.5 rounded-sm ml-2" />
+            <span className="text-xs text-muted-foreground">Level 1</span>
+          </>
+        ) : (
+          <>
+            <div className="bg-indigo-400 dark:bg-indigo-500 size-2.5 rounded-sm" />
+            <span className="text-xs text-muted-foreground">Stored content</span>
+          </>
+        )}
         {snapshot.retrievalEvent && (
           <span className="ml-2 text-xs text-indigo-600 dark:text-indigo-400 font-medium">
             — retrieval

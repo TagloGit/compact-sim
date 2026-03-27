@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createRng, retrievalProbability, retrievalCost } from '../retrieval'
+import { createRng, retrievalProbability, retrievalCost, averageStoreLevel } from '../retrieval'
 import { DEFAULT_CONFIG } from '../types'
 
 const config = DEFAULT_CONFIG
@@ -62,6 +62,53 @@ describe('retrievalCost', () => {
     expect(cost.output).toBe(0)
     expect(cost.compactionInput).toBe(0)
     expect(cost.compactionOutput).toBe(0)
+  })
+
+  it('scales cost by (averageLevel + 1)', () => {
+    const baseCost = retrievalCost(config, 0)
+    const level1Cost = retrievalCost(config, 1)
+    // Level 1: multiplier is 2
+    expect(level1Cost.retrievalInput).toBeCloseTo(baseCost.retrievalInput * 2, 10)
+    expect(level1Cost.retrievalOutput).toBeCloseTo(baseCost.retrievalOutput * 2, 10)
+    expect(level1Cost.total).toBeCloseTo(baseCost.total * 2, 10)
+  })
+
+  it('handles fractional average levels', () => {
+    const cost = retrievalCost(config, 0.5)
+    const baseCost = retrievalCost(config, 0)
+    // multiplier = 1.5
+    expect(cost.total).toBeCloseTo(baseCost.total * 1.5, 10)
+  })
+})
+
+describe('averageStoreLevel', () => {
+  it('returns 0 for empty entries', () => {
+    expect(averageStoreLevel([])).toBe(0)
+  })
+
+  it('returns 0 for all level-0 entries', () => {
+    const entries = [
+      { tokens: 1000, level: 0 },
+      { tokens: 2000, level: 0 },
+    ]
+    expect(averageStoreLevel(entries)).toBe(0)
+  })
+
+  it('computes token-weighted average', () => {
+    const entries = [
+      { tokens: 8000, level: 0 },
+      { tokens: 2000, level: 1 },
+    ]
+    // weighted: (8000*0 + 2000*1) / 10000 = 0.2
+    expect(averageStoreLevel(entries)).toBeCloseTo(0.2, 6)
+  })
+
+  it('returns exact level when all entries are same level', () => {
+    const entries = [
+      { tokens: 1000, level: 2 },
+      { tokens: 3000, level: 2 },
+    ]
+    expect(averageStoreLevel(entries)).toBe(2)
   })
 })
 
