@@ -72,6 +72,49 @@ export function retrievalCost(
 }
 
 /**
+ * Calculate the cost of a single retrieval event for the LCM sub-agent
+ * strategy (4d), which uses a mix of two tools:
+ *
+ * - `lcm_grep` (cheap): retrievalQueryTokens * baseInputPrice + lcmGrepResponseTokens * outputPrice
+ * - `lcm_expand` (expensive): (retrievalQueryTokens + retrievalResponseTokens) * baseInputPrice + retrievalResponseTokens * outputPrice
+ *
+ * The mix is controlled by `lcmGrepRatio` (default 0.70 = 70% grep, 30% expand).
+ */
+export function lcmSubagentRetrievalCost(
+  config: SimulationConfig,
+): StepCost {
+  const grepRatio = config.lcmGrepRatio
+  const expandRatio = 1 - grepRatio
+
+  // lcm_grep cost
+  const grepInput = config.retrievalQueryTokens * config.baseInputPrice
+  const grepOutput = config.lcmGrepResponseTokens * config.outputPrice
+  const grepCost = grepInput + grepOutput
+
+  // lcm_expand cost — query + retrieved content as input, response as output
+  const expandInput =
+    (config.retrievalQueryTokens + config.retrievalResponseTokens) *
+    config.baseInputPrice
+  const expandOutput = config.retrievalResponseTokens * config.outputPrice
+  const expandCost = expandInput + expandOutput
+
+  const blendedCost = grepRatio * grepCost + expandRatio * expandCost
+
+  // Split blended cost into input/output buckets proportionally
+  const totalInput =
+    grepRatio * grepInput + expandRatio * expandInput
+  const totalOutput =
+    grepRatio * grepOutput + expandRatio * expandOutput
+
+  return {
+    ...ZERO_COST,
+    retrievalInput: totalInput,
+    retrievalOutput: totalOutput,
+    total: blendedCost,
+  }
+}
+
+/**
  * Compute the token-weighted average level of entries in an external store.
  * Returns 0 when the store is empty.
  */

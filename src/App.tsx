@@ -36,6 +36,7 @@ function App() {
             {config.selectedStrategy === 'lossless-append' && 'Strategy 4a — Lossless append-only with external retrieval'}
             {config.selectedStrategy === 'lossless-hierarchical' && 'Strategy 4b — Lossless hierarchical with levelled external retrieval'}
             {config.selectedStrategy === 'lossless-tool-results' && 'Strategy 4c — Tool-results-only lossless with external retrieval'}
+            {config.selectedStrategy === 'lcm-subagent' && 'Strategy 4d — LCM sub-agent retrieval (grep + expand)'}
             {config.toolCompressionEnabled && ' + tool result compression'}
           </p>
         </div>
@@ -82,7 +83,7 @@ function App() {
               label="Final Cost"
               value={formatCost(result.summary.totalCost)}
             />
-            {(config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-hierarchical' || config.selectedStrategy === 'lossless-tool-results') && (
+            {(config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-hierarchical' || config.selectedStrategy === 'lossless-tool-results' || config.selectedStrategy === 'lcm-subagent') && (
               <>
                 <StatCard
                   label="External Store"
@@ -116,7 +117,7 @@ function App() {
         )}
 
         {/* External store visualisation (4x strategies only) */}
-        {currentSnapshot && (config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-hierarchical' || config.selectedStrategy === 'lossless-tool-results') && (
+        {currentSnapshot && (config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-hierarchical' || config.selectedStrategy === 'lossless-tool-results' || config.selectedStrategy === 'lcm-subagent') && (
           <ExternalStore
             snapshot={currentSnapshot}
             contextWindow={config.contextWindow}

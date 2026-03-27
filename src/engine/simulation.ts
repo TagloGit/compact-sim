@@ -19,6 +19,7 @@ import {
   createRng,
   retrievalProbability,
   retrievalCost,
+  lcmSubagentRetrievalCost,
   averageStoreLevel,
   type Rng,
 } from './retrieval'
@@ -318,8 +319,12 @@ export function calculateCost(
 
   // Retrieval cost when a retrieval event fired
   if (state.retrievalEvent) {
-    const avgLevel = averageStoreLevel(state.externalStore.entries)
-    stepCost = addCosts(stepCost, retrievalCost(config, avgLevel))
+    if (config.selectedStrategy === 'lcm-subagent') {
+      stepCost = addCosts(stepCost, lcmSubagentRetrievalCost(config))
+    } else {
+      const avgLevel = averageStoreLevel(state.externalStore.entries)
+      stepCost = addCosts(stepCost, retrievalCost(config, avgLevel))
+    }
   }
 
   return {

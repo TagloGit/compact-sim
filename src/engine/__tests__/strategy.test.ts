@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { strategy1, strategy2, strategy4a, strategy4b, strategy4c, getStrategy } from '../strategy'
+import { strategy1, strategy2, strategy4a, strategy4b, strategy4c, strategy4d, getStrategy } from '../strategy'
 import type { ContextState, Message, SimulationConfig } from '../types'
 import { DEFAULT_CONFIG } from '../types'
 
@@ -657,6 +657,126 @@ describe('strategy4c', () => {
   })
 })
 
+describe('strategy4d', () => {
+  const config: SimulationConfig = {
+    ...DEFAULT_CONFIG,
+    contextWindow: 10_000,
+    compactionThreshold: 0.8,
+    incrementalInterval: 5_000,
+    summaryAccumulationThreshold: 10_000,
+    compressionRatio: 10,
+  }
+
+  it('does NOT compact when below both thresholds', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 300),
+    ])
+    const result = strategy4d.evaluate(context, config)
+    expect(result.shouldCompact).toBe(false)
+    expect(result.externalStoreEntries).toBeUndefined()
+  })
+
+  it('compacts ALL non-system content into single summary', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 2_000),
+      makeMsg('tc1', 'tool_call', 200),
+      makeMsg('tr1', 'tool_result', 3_000),
+    ])
+    // New content: 5400 > 5000
+    const result = strategy4d.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+
+    // Context after: [system, summary]
+    expect(result.newContext!.messages.length).toBe(2)
+    expect(result.newContext!.messages[0].type).toBe('system')
+    expect(result.newContext!.messages[1].type).toBe('summary')
+
+    // Summary based on ALL non-system tokens (5400)
+    expect(result.summaryMessage!.tokens).toBe(Math.ceil(5_400 / 10))
+  })
+
+  it('compactedMessageIds includes all non-system messages', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s0', 'summary', 540),
+      makeMsg('u2', 'user', 200),
+      makeMsg('a2', 'assistant', 5_000),
+    ])
+    const result = strategy4d.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+    expect(result.compactedMessageIds).toEqual(['s0', 'u2', 'a2'])
+  })
+
+  it('context is always [system] [single_summary] after compaction', () => {
+    // After first compaction with existing summary + new content
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s0', 'summary', 540),
+      makeMsg('u2', 'user', 200),
+      makeMsg('a2', 'assistant', 2_000),
+      makeMsg('tc2', 'tool_call', 200),
+      makeMsg('tr2', 'tool_result', 3_000),
+    ])
+    const result = strategy4d.evaluate(context, config)
+    expect(result.shouldCompact).toBe(true)
+    expect(result.newContext!.messages.length).toBe(2)
+    expect(result.newContext!.messages[0].type).toBe('system')
+    expect(result.newContext!.messages[1].type).toBe('summary')
+  })
+
+  it('stores all compacted content in external store', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 2_000),
+      makeMsg('tc1', 'tool_call', 200),
+      makeMsg('tr1', 'tool_result', 3_000),
+    ])
+    const result = strategy4d.evaluate(context, config)
+    expect(result.externalStoreEntries).toBeDefined()
+    expect(result.externalStoreEntries!.length).toBe(1)
+
+    const entry = result.externalStoreEntries![0]
+    expect(entry.originalMessageIds).toEqual(['u1', 'a1', 'tc1', 'tr1'])
+    expect(entry.tokens).toBe(5_400)
+    expect(entry.level).toBe(0)
+  })
+
+  it('trigger is based on new content (after last summary), not total non-system', () => {
+    const context = makeContext([
+      makeMsg('sys', 'system', 4_000),
+      makeMsg('s0', 'summary', 540),
+      makeMsg('u2', 'user', 200),
+      makeMsg('a2', 'assistant', 300),
+    ])
+    // New content: 200 + 300 = 500 < 5000, total: 5040 < 8000
+    const result = strategy4d.evaluate(context, config)
+    expect(result.shouldCompact).toBe(false)
+  })
+
+  it('compacts when main threshold exceeded before incremental interval', () => {
+    const thresholdConfig: SimulationConfig = {
+      ...config,
+      incrementalInterval: 100_000,
+    }
+    const context = makeContext([
+      makeMsg('sys', 'system', 1_000),
+      makeMsg('u1', 'user', 200),
+      makeMsg('a1', 'assistant', 3_000),
+      makeMsg('tc1', 'tool_call', 200),
+      makeMsg('tr1', 'tool_result', 5_000),
+    ])
+    // 9400 > 8000 threshold
+    const result = strategy4d.evaluate(context, thresholdConfig)
+    expect(result.shouldCompact).toBe(true)
+    expect(result.compactedMessageIds).toEqual(['u1', 'a1', 'tc1', 'tr1'])
+  })
+})
+
 describe('getStrategy', () => {
   it('returns a valid strategy for full-compaction', () => {
     const strategy = getStrategy('full-compaction')
@@ -684,6 +804,12 @@ describe('getStrategy', () => {
 
   it('returns a valid strategy for lossless-tool-results', () => {
     const strategy = getStrategy('lossless-tool-results')
+    expect(strategy).toBeDefined()
+    expect(typeof strategy.evaluate).toBe('function')
+  })
+
+  it('returns a valid strategy for lcm-subagent', () => {
+    const strategy = getStrategy('lcm-subagent')
     expect(strategy).toBeDefined()
     expect(typeof strategy.evaluate).toBe('function')
   })
