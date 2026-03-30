@@ -359,73 +359,82 @@ export function buildSnapshot(
 }
 
 // ---------------------------------------------------------------------------
-// Main simulation runner
+// Simulation runner (conversation provided)
+// ---------------------------------------------------------------------------
+
+export function runSimulationWithConversation(
+  config: SimulationConfig,
+  allMessages: readonly Message[],
+): SimulationResult {
+  const snapshots: SimulationSnapshot[] = []
+  let totalTokensGenerated = 0
+
+  let state: StepState = {
+    conversation: [],
+    context: { messages: [], totalTokens: 0 },
+    previousContext: null,
+    externalStore: EMPTY_EXTERNAL_STORE,
+    compressedTokens: 0,
+    summaryCounter: 0,
+    cumulativeCost: ZERO_COST,
+    peakContextSize: 0,
+    rng: createRng(42),
+    // Per-step transient (reset in ingestMessage)
+    compactionEvent: false,
+    retrievalEvent: false,
+    tokensCompacted: 0,
+    summaryTokens: 0,
+    pendingStoreEntries: [],
+    cache: ZERO_CACHE,
+    stepCost: ZERO_COST,
+  }
+
+  for (let i = 0; i < allMessages.length; i++) {
+    state = ingestMessage(state, allMessages[i], config)
+
+    // The processed message (with tool compression applied) is the last in conversation
+    const message = state.conversation[state.conversation.length - 1]
+
+    state = buildContext(state)
+    state = evaluateCompaction(state, config)
+    state = updateExternalStore(state, config)
+    state = calculateCache(state, message, config)
+    state = rollRetrieval(state, message, config)
+    state = calculateCost(state, message, config)
+
+    totalTokensGenerated += message.tokens
+
+    snapshots.push(buildSnapshot(state, message, i))
+  }
+
+  // Calculate average cache hit rate across LLM call steps
+  const llmSteps = snapshots.filter((s) => isLlmCallStep(s.message))
+  const averageCacheHitRate =
+    llmSteps.length > 0
+      ? llmSteps.reduce((sum, s) => sum + s.cache.hitRate, 0) /
+        llmSteps.length
+      : 0
+
+  return {
+    config,
+    snapshots,
+    summary: {
+      totalCost: state.cumulativeCost.total,
+      totalTokensGenerated,
+      compactionEvents: snapshots.filter((s) => s.compactionEvent).length,
+      averageCacheHitRate,
+      peakContextSize: state.peakContextSize,
+    },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main simulation runner (generates conversation, then simulates)
 // ---------------------------------------------------------------------------
 
 export const runSimulation = (
   config: SimulationConfig,
 ): Effect.Effect<SimulationResult> =>
   Effect.flatMap(generateConversation(config), (allMessages) =>
-    Effect.sync(() => {
-      const snapshots: SimulationSnapshot[] = []
-      let totalTokensGenerated = 0
-
-      let state: StepState = {
-        conversation: [],
-        context: { messages: [], totalTokens: 0 },
-        previousContext: null,
-        externalStore: EMPTY_EXTERNAL_STORE,
-        compressedTokens: 0,
-        summaryCounter: 0,
-        cumulativeCost: ZERO_COST,
-        peakContextSize: 0,
-        rng: createRng(42),
-        // Per-step transient (reset in ingestMessage)
-        compactionEvent: false,
-        retrievalEvent: false,
-        tokensCompacted: 0,
-        summaryTokens: 0,
-        pendingStoreEntries: [],
-        cache: ZERO_CACHE,
-        stepCost: ZERO_COST,
-      }
-
-      for (let i = 0; i < allMessages.length; i++) {
-        state = ingestMessage(state, allMessages[i], config)
-
-        // The processed message (with tool compression applied) is the last in conversation
-        const message = state.conversation[state.conversation.length - 1]
-
-        state = buildContext(state)
-        state = evaluateCompaction(state, config)
-        state = updateExternalStore(state, config)
-        state = calculateCache(state, message, config)
-        state = rollRetrieval(state, message, config)
-        state = calculateCost(state, message, config)
-
-        totalTokensGenerated += message.tokens
-
-        snapshots.push(buildSnapshot(state, message, i))
-      }
-
-      // Calculate average cache hit rate across LLM call steps
-      const llmSteps = snapshots.filter((s) => isLlmCallStep(s.message))
-      const averageCacheHitRate =
-        llmSteps.length > 0
-          ? llmSteps.reduce((sum, s) => sum + s.cache.hitRate, 0) /
-            llmSteps.length
-          : 0
-
-      return {
-        config,
-        snapshots,
-        summary: {
-          totalCost: state.cumulativeCost.total,
-          totalTokensGenerated,
-          compactionEvents: snapshots.filter((s) => s.compactionEvent).length,
-          averageCacheHitRate,
-          peakContextSize: state.peakContextSize,
-        },
-      }
-    }),
+    Effect.sync(() => runSimulationWithConversation(config, allMessages)),
   )
