@@ -186,24 +186,54 @@ function StrategySweepEditor({
   )
 }
 
-/** Fixed value display for a parameter */
-function FixedValueDisplay({
+/** Inline editor for a fixed parameter value */
+function FixedValueEditor({
   paramKey,
   value,
+  onChange,
 }: {
   paramKey: keyof SimulationConfig
   value: number | string | boolean
+  onChange: (value: number | string | boolean) => void
 }) {
   const meta = PARAM_META[paramKey]
   if (meta.paramKind === 'strategy') {
-    const opt = STRATEGY_OPTIONS.find((o) => o.value === value)
-    return <span className="text-xs tabular-nums text-muted-foreground">{opt?.label ?? String(value)}</span>
+    return (
+      <Select value={value as string} onValueChange={(v) => { if (v) onChange(v) }}>
+        <SelectTrigger className="h-6 w-auto max-w-[180px] text-xs text-muted-foreground border-none shadow-none px-1 hover:bg-muted">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {STRATEGY_OPTIONS.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value} className="text-xs">
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    )
   }
   if (meta.paramKind === 'boolean') {
-    return <span className="text-xs text-muted-foreground">{value ? 'On' : 'Off'}</span>
+    return (
+      <button
+        onClick={() => onChange(!value)}
+        className="text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded px-1 py-0.5 transition-colors cursor-pointer"
+      >
+        {value ? 'On' : 'Off'}
+      </button>
+    )
   }
+  const m = meta as NumericParamMeta
   const display = toDisplay(paramKey, value as number)
-  return <span className="text-xs tabular-nums text-muted-foreground">{display}</span>
+  return (
+    <DebouncedInput
+      value={display}
+      min={m.uiMin}
+      max={m.uiMax}
+      step={m.uiStep}
+      onChange={(v) => onChange(fromDisplay(paramKey, v))}
+    />
+  )
 }
 
 /** A small debounced number input */
@@ -309,7 +339,11 @@ function ParamRow({
           <span className="shrink-0 text-[10px] tabular-nums text-blue-500 font-medium">{steps}</span>
         )}
         {!isSwept && (
-          <FixedValueDisplay paramKey={paramKey} value={(def as { value: unknown }).value as number | string | boolean} />
+          <FixedValueEditor
+            paramKey={paramKey}
+            value={(def as { value: unknown }).value as number | string | boolean}
+            onChange={(v) => onUpdate({ kind: 'fixed', value: v } as SweepParameterDef)}
+          />
         )}
       </div>
 
