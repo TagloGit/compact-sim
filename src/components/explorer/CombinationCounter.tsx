@@ -6,7 +6,13 @@ import { PARAM_META, type NumericParamMeta } from '@/engine/sweep-defaults'
 import { Slider } from '@/components/ui/slider'
 import { Label } from '@/components/ui/label'
 
-const WARNING_THRESHOLD = 50_000
+const WARNING_THRESHOLD = 10_000
+
+/**
+ * Approximate single-threaded simulation throughput (runs/sec).
+ * Measured via sweep-benchmark.test.ts across 100–50,000 runs.
+ */
+const ESTIMATED_SINGLE_THREAD_THROUGHPUT = 350
 
 interface CombinationCounterProps {
   config: SweepConfig
@@ -29,6 +35,16 @@ function getStepCount(key: keyof SimulationConfig, def: SweepParameterDef): numb
 
 function formatNumber(n: number): string {
   return n.toLocaleString()
+}
+
+function estimatedTime(total: number): string {
+  const cores = typeof navigator !== 'undefined'
+    ? (navigator.hardwareConcurrency || 4)
+    : 4
+  const seconds = total / (ESTIMATED_SINGLE_THREAD_THROUGHPUT * cores)
+  if (seconds < 60) return `${Math.round(seconds)}s`
+  const minutes = Math.round(seconds / 60)
+  return `${minutes}m`
 }
 
 export function CombinationCounter({ config, onChange }: CombinationCounterProps) {
@@ -122,7 +138,9 @@ export function CombinationCounter({ config, onChange }: CombinationCounterProps
       {total > WARNING_THRESHOLD && (
         <div className="flex items-start gap-2 rounded bg-amber-500/10 px-2 py-1.5 text-xs text-amber-600 dark:text-amber-400">
           <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
-          <span>High combination count may take a while to run.</span>
+          <span>
+            High combination count — estimated {estimatedTime(total)}.
+          </span>
         </div>
       )}
 
