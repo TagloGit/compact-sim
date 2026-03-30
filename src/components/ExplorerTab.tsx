@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import type { SimulationConfig, StrategyType } from '@/engine/types'
 import type { SweepConfig, SweepParameterDef, NumericSweepRange } from '@/engine/sweep-types'
 import { buildDefaultSweepConfig, PARAM_META } from '@/engine/sweep-defaults'
@@ -32,16 +32,19 @@ export function ExplorerTab(_props: ExplorerTabProps) {
     return swept.reduce((acc, [key, def]) => acc * getStepCount(key, def), 1)
   }, [sweepConfig])
 
+  const intervalRef = useRef<ReturnType<typeof setInterval>>(null)
+
   const handleRun = useCallback(() => {
     // Mock run — just animate progress
     setIsRunning(true)
     setProgress(0)
     let p = 0
-    const interval = setInterval(() => {
+    intervalRef.current = setInterval(() => {
       p += 0.1
       if (p >= 1) {
         p = 1
-        clearInterval(interval)
+        if (intervalRef.current) clearInterval(intervalRef.current)
+        intervalRef.current = null
         setIsRunning(false)
       }
       setProgress(p)
@@ -49,6 +52,8 @@ export function ExplorerTab(_props: ExplorerTabProps) {
   }, [])
 
   const handleCancel = useCallback(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current)
+    intervalRef.current = null
     setIsRunning(false)
     setProgress(0)
   }, [])
