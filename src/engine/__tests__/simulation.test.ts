@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { Effect } from 'effect'
-import { runSimulation } from '../simulation'
+import { runSimulation, runSimulationWithConversation } from '../simulation'
+import { generateConversation } from '../conversation'
 import type { SimulationConfig } from '../types'
 import { DEFAULT_CONFIG } from '../types'
 
@@ -659,6 +660,38 @@ describe('runSimulation', () => {
         expect(lastRetrieval.cost.retrievalInput).toBeGreaterThanOrEqual(
           firstRetrieval.cost.retrievalInput,
         )
+      }
+    })
+  })
+
+  describe('runSimulationWithConversation', () => {
+    it('produces identical results to runSimulation for the same config', () => {
+      const config: SimulationConfig = {
+        ...DEFAULT_CONFIG,
+        toolCallCycles: 10,
+        toolCallSize: 200,
+        toolResultSize: 2_000,
+        assistantMessageSize: 300,
+        reasoningOutputSize: 0,
+        userMessageFrequency: 100,
+        userMessageSize: 200,
+        systemPromptSize: 4_000,
+        contextWindow: 10_000,
+        compactionThreshold: 0.8,
+        compressionRatio: 10,
+      }
+
+      // Generate conversation separately, then run both paths
+      const messages = Effect.runSync(generateConversation(config))
+      const fromRunSimulation = run(config)
+      const fromWithConversation = runSimulationWithConversation(config, messages)
+
+      expect(fromWithConversation.summary).toEqual(fromRunSimulation.summary)
+      expect(fromWithConversation.snapshots.length).toBe(fromRunSimulation.snapshots.length)
+      for (let i = 0; i < fromWithConversation.snapshots.length; i++) {
+        expect(fromWithConversation.snapshots[i].cost).toEqual(fromRunSimulation.snapshots[i].cost)
+        expect(fromWithConversation.snapshots[i].cumulativeCost).toEqual(fromRunSimulation.snapshots[i].cumulativeCost)
+        expect(fromWithConversation.snapshots[i].context.totalTokens).toBe(fromRunSimulation.snapshots[i].context.totalTokens)
       }
     })
   })
