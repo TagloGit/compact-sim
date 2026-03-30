@@ -10,9 +10,11 @@ const WARNING_THRESHOLD = 10_000
 
 /**
  * Approximate single-threaded simulation throughput (runs/sec).
- * Measured via sweep-benchmark.test.ts across 100–50,000 runs.
+ * Benchmarked at ~350 runs/s in Node.js (sweep-benchmark.test.ts), but
+ * browser execution adds ~2x overhead from worker message serialisation
+ * and React state updates per result. Calibrated against real browser runs.
  */
-const ESTIMATED_SINGLE_THREAD_THROUGHPUT = 350
+const ESTIMATED_SINGLE_THREAD_THROUGHPUT = 175
 
 interface CombinationCounterProps {
   config: SweepConfig

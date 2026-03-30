@@ -14,7 +14,7 @@ Environment: Windows 11, Node.js (Vitest), single-threaded execution
 
 Per-run baseline (DEFAULT_CONFIG, 100 tool-call cycles): **2.2ms / 455 runs/s**
 
-Average single-threaded throughput: **~350 runs/s** (conservative estimate for estimations).
+Average single-threaded throughput: **~350 runs/s** in Node.js. In the browser, worker message serialisation and React state updates add ~2x overhead, giving an effective **~175 runs/s** per thread. The UI estimate uses the browser-calibrated figure.
 
 ## Conversation generation cost
 
