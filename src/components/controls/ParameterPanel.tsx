@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { SimulationConfig } from '@/engine/types'
 import type { StrategyType } from '@/engine/types'
+import { PARAM_META, type NumericParamMeta } from '@/engine/sweep-defaults'
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
@@ -12,6 +13,10 @@ import { Switch } from '@/components/ui/switch'
 interface ParameterPanelProps {
   config: SimulationConfig
   onUpdate: <K extends keyof SimulationConfig>(key: K, value: SimulationConfig[K]) => void
+}
+
+function meta(key: keyof SimulationConfig): NumericParamMeta {
+  return PARAM_META[key] as NumericParamMeta
 }
 
 // --- Slider + Input control ---
@@ -250,12 +255,51 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
   )
 }
 
+// --- Helpers for display-unit conversion ---
+
+function toDisplay(key: keyof SimulationConfig, configValue: number): number {
+  const m = meta(key)
+  if (m.displayMultiplier === 1) return configValue
+  return parseFloat((configValue * m.displayMultiplier).toFixed(2))
+}
+
+function fromDisplay(key: keyof SimulationConfig, displayValue: number): number {
+  const m = meta(key)
+  return displayValue / m.displayMultiplier
+}
+
 // --- Main panel ---
 
 export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
-  // Pricing helpers: config stores per-token prices, UI shows $/M
-  const toPerMillion = (perToken: number) => parseFloat((perToken * 1_000_000).toFixed(2))
-  const fromPerMillion = (perMillion: number) => perMillion / 1_000_000
+  // Shorthand for a SliderInput bound to a config key (with display-unit conversion)
+  const slider = (key: keyof SimulationConfig & string) => {
+    const m = meta(key)
+    return (
+      <SliderInput
+        label={m.displayName}
+        value={toDisplay(key, config[key] as number)}
+        min={m.uiMin}
+        max={m.uiMax}
+        step={m.uiStep}
+        onChange={(v) => onUpdate(key, fromDisplay(key, v) as SimulationConfig[typeof key])}
+      />
+    )
+  }
+
+  // Shorthand for a NumberInput bound to a config key (with display-unit conversion)
+  const numberInput = (key: keyof SimulationConfig & string) => {
+    const m = meta(key)
+    return (
+      <NumberInput
+        label={m.displayName}
+        value={toDisplay(key, config[key] as number)}
+        min={m.uiMin}
+        max={m.uiMax}
+        step={m.uiStep}
+        onChange={(v) => onUpdate(key, fromDisplay(key, v) as SimulationConfig[typeof key])}
+      />
+    )
+  }
 
   return (
     <div className="space-y-1 p-4">
@@ -273,95 +317,34 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
 
             {(config.selectedStrategy === 'incremental' || config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-hierarchical' || config.selectedStrategy === 'lossless-tool-results' || config.selectedStrategy === 'lcm-subagent') && (
               <>
-                <SliderInput
-                  label="Incremental interval (tokens)"
-                  value={config.incrementalInterval}
-                  min={5000}
-                  max={100000}
-                  step={1000}
-                  onChange={(v) => onUpdate('incrementalInterval', v)}
-                />
-                <SliderInput
-                  label="Summary accumulation threshold (tokens)"
-                  value={config.summaryAccumulationThreshold}
-                  min={10000}
-                  max={200000}
-                  step={5000}
-                  onChange={(v) => onUpdate('summaryAccumulationThreshold', v)}
-                />
+                {slider('incrementalInterval')}
+                {slider('summaryAccumulationThreshold')}
               </>
             )}
 
             {(config.selectedStrategy === 'lossless-append' || config.selectedStrategy === 'lossless-hierarchical' || config.selectedStrategy === 'lossless-tool-results' || config.selectedStrategy === 'lcm-subagent') && (
               <>
-                <NumberInput
-                  label="pRetrieve max"
-                  value={config.pRetrieveMax}
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  onChange={(v) => onUpdate('pRetrieveMax', v)}
-                />
-                <SliderInput
-                  label="Compressed tokens cap"
-                  value={config.compressedTokensCap}
-                  min={10000}
-                  max={500000}
-                  step={10000}
-                  onChange={(v) => onUpdate('compressedTokensCap', v)}
-                />
-                <NumberInput
-                  label="Retrieval query tokens"
-                  value={config.retrievalQueryTokens}
-                  min={100}
-                  max={5000}
-                  onChange={(v) => onUpdate('retrievalQueryTokens', v)}
-                />
-                <NumberInput
-                  label="Retrieval response tokens"
-                  value={config.retrievalResponseTokens}
-                  min={100}
-                  max={5000}
-                  onChange={(v) => onUpdate('retrievalResponseTokens', v)}
-                />
+                {numberInput('pRetrieveMax')}
+                {slider('compressedTokensCap')}
+                {numberInput('retrievalQueryTokens')}
+                {numberInput('retrievalResponseTokens')}
               </>
             )}
 
             {config.selectedStrategy === 'lcm-subagent' && (
               <>
-                <NumberInput
-                  label="LCM grep ratio"
-                  value={config.lcmGrepRatio}
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  onChange={(v) => onUpdate('lcmGrepRatio', v)}
-                />
-                <NumberInput
-                  label="LCM grep response tokens"
-                  value={config.lcmGrepResponseTokens}
-                  min={10}
-                  max={2000}
-                  onChange={(v) => onUpdate('lcmGrepResponseTokens', v)}
-                />
+                {numberInput('lcmGrepRatio')}
+                {numberInput('lcmGrepResponseTokens')}
               </>
             )}
 
             <DeferredSwitch
-              label="Tool result compression"
+              label={PARAM_META.toolCompressionEnabled.displayName}
               checked={config.toolCompressionEnabled}
               onChange={(v) => onUpdate('toolCompressionEnabled', v)}
             />
 
-            {config.toolCompressionEnabled && (
-              <SliderInput
-                label="Tool compression ratio (X:1)"
-                value={config.toolCompressionRatio}
-                min={2}
-                max={20}
-                onChange={(v) => onUpdate('toolCompressionRatio', v)}
-              />
-            )}
+            {config.toolCompressionEnabled && slider('toolCompressionRatio')}
           </div>
         </CollapsibleContent>
       </Collapsible>
@@ -371,64 +354,14 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
         <SectionHeader>Conversation Shape</SectionHeader>
         <CollapsibleContent>
           <div className="space-y-3 pb-4">
-            <NumberInput
-              label="Tool call cycles"
-              value={config.toolCallCycles}
-              min={1}
-              max={500}
-              onChange={(v) => onUpdate('toolCallCycles', v)}
-            />
-            <SliderInput
-              label="Tool call size (tokens)"
-              value={config.toolCallSize}
-              min={10}
-              max={2000}
-              onChange={(v) => onUpdate('toolCallSize', v)}
-            />
-            <SliderInput
-              label="Tool result size (tokens)"
-              value={config.toolResultSize}
-              min={100}
-              max={50000}
-              step={100}
-              onChange={(v) => onUpdate('toolResultSize', v)}
-            />
-            <SliderInput
-              label="Assistant message size (tokens)"
-              value={config.assistantMessageSize}
-              min={10}
-              max={5000}
-              onChange={(v) => onUpdate('assistantMessageSize', v)}
-            />
-            <SliderInput
-              label="Reasoning output size (tokens)"
-              value={config.reasoningOutputSize}
-              min={0}
-              max={10000}
-              onChange={(v) => onUpdate('reasoningOutputSize', v)}
-            />
-            <NumberInput
-              label="User msg frequency (every N cycles)"
-              value={config.userMessageFrequency}
-              min={1}
-              max={100}
-              onChange={(v) => onUpdate('userMessageFrequency', v)}
-            />
-            <SliderInput
-              label="User message size (tokens)"
-              value={config.userMessageSize}
-              min={10}
-              max={5000}
-              onChange={(v) => onUpdate('userMessageSize', v)}
-            />
-            <SliderInput
-              label="System prompt size (tokens)"
-              value={config.systemPromptSize}
-              min={100}
-              max={50000}
-              step={100}
-              onChange={(v) => onUpdate('systemPromptSize', v)}
-            />
+            {numberInput('toolCallCycles')}
+            {slider('toolCallSize')}
+            {slider('toolResultSize')}
+            {slider('assistantMessageSize')}
+            {slider('reasoningOutputSize')}
+            {numberInput('userMessageFrequency')}
+            {slider('userMessageSize')}
+            {slider('systemPromptSize')}
           </div>
         </CollapsibleContent>
       </Collapsible>
@@ -438,29 +371,9 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
         <SectionHeader>Context &amp; Compaction</SectionHeader>
         <CollapsibleContent>
           <div className="space-y-3 pb-4">
-            <SliderInput
-              label="Context window (tokens)"
-              value={config.contextWindow}
-              min={10000}
-              max={2000000}
-              step={10000}
-              onChange={(v) => onUpdate('contextWindow', v)}
-            />
-            <SliderInput
-              label="Compaction threshold (%)"
-              value={Math.round(config.compactionThreshold * 100)}
-              min={50}
-              max={99}
-              onChange={(v) => onUpdate('compactionThreshold', v / 100)}
-            />
-            <SliderInput
-              label="Compression ratio (X:1)"
-              value={config.compressionRatio}
-              min={1.1}
-              max={50}
-              step={0.1}
-              onChange={(v) => onUpdate('compressionRatio', v)}
-            />
+            {slider('contextWindow')}
+            {slider('compactionThreshold')}
+            {slider('compressionRatio')}
           </div>
         </CollapsibleContent>
       </Collapsible>
@@ -470,61 +383,13 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
         <SectionHeader>Pricing</SectionHeader>
         <CollapsibleContent>
           <div className="space-y-3 pb-4">
-            <NumberInput
-              label="Base input price ($/M)"
-              value={toPerMillion(config.baseInputPrice)}
-              min={0.01}
-              max={100}
-              step={0.01}
-              onChange={(v) => onUpdate('baseInputPrice', fromPerMillion(v))}
-            />
-            <NumberInput
-              label="Output price ($/M)"
-              value={toPerMillion(config.outputPrice)}
-              min={0.01}
-              max={200}
-              step={0.01}
-              onChange={(v) => onUpdate('outputPrice', fromPerMillion(v))}
-            />
-            <NumberInput
-              label="Cache write multiplier"
-              value={config.cacheWriteMultiplier}
-              min={1.0}
-              max={5.0}
-              step={0.01}
-              onChange={(v) => onUpdate('cacheWriteMultiplier', v)}
-            />
-            <NumberInput
-              label="Cache hit multiplier"
-              value={config.cacheHitMultiplier}
-              min={0.01}
-              max={1.0}
-              step={0.01}
-              onChange={(v) => onUpdate('cacheHitMultiplier', v)}
-            />
-            <NumberInput
-              label="Min cacheable tokens"
-              value={config.minCacheableTokens}
-              min={0}
-              max={50000}
-              onChange={(v) => onUpdate('minCacheableTokens', v)}
-            />
-            <NumberInput
-              label="Compaction input price ($/M)"
-              value={toPerMillion(config.compactionInputPrice)}
-              min={0.01}
-              max={50}
-              step={0.01}
-              onChange={(v) => onUpdate('compactionInputPrice', fromPerMillion(v))}
-            />
-            <NumberInput
-              label="Compaction output price ($/M)"
-              value={toPerMillion(config.compactionOutputPrice)}
-              min={0.01}
-              max={100}
-              step={0.01}
-              onChange={(v) => onUpdate('compactionOutputPrice', fromPerMillion(v))}
-            />
+            {numberInput('baseInputPrice')}
+            {numberInput('outputPrice')}
+            {numberInput('cacheWriteMultiplier')}
+            {numberInput('cacheHitMultiplier')}
+            {numberInput('minCacheableTokens')}
+            {numberInput('compactionInputPrice')}
+            {numberInput('compactionOutputPrice')}
           </div>
         </CollapsibleContent>
       </Collapsible>
