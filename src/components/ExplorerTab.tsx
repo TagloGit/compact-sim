@@ -1,14 +1,13 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
-import type { SimulationConfig, StrategyType } from '@/engine/types'
-import { DEFAULT_CONFIG } from '@/engine/types'
+import type { SimulationConfig } from '@/engine/types'
 import type {
   SweepConfig,
   SweepParameterDef,
-  NumericSweepRange,
   SweepRunResult,
   SweepMetrics,
 } from '@/engine/sweep-types'
-import { buildDefaultSweepConfig, PARAM_META } from '@/engine/sweep-defaults'
+import { buildDefaultSweepConfig } from '@/engine/sweep-defaults'
+import { expandSweepConfig, expandParamValues } from '@/engine/sweep'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { SweepParameterPanel } from '@/components/explorer/SweepParameterPanel'
 import { CombinationCounter } from '@/components/explorer/CombinationCounter'
@@ -21,88 +20,29 @@ interface ExplorerTabProps {
   onOpenInSimulator: (config: SimulationConfig) => void
 }
 
-function getStepCount(key: keyof SimulationConfig, def: SweepParameterDef): number {
-  if (def.kind === 'fixed') return 1
-  const meta = PARAM_META[key]
-  if (meta.paramKind === 'strategy') return (def as { values: StrategyType[] }).values.length
-  if (meta.paramKind === 'boolean') return 2
-  return (def as NumericSweepRange).steps
-}
-
 // --- Mock data generation ---
-
-function generateLinearValues(min: number, max: number, steps: number): number[] {
-  if (steps <= 1) return [min]
-  return Array.from({ length: steps }, (_, i) => min + (max - min) * (i / (steps - 1)))
-}
-
-function generateLogValues(min: number, max: number, steps: number): number[] {
-  if (steps <= 1) return [min]
-  const logMin = Math.log(Math.max(min, 1e-12))
-  const logMax = Math.log(Math.max(max, 1e-12))
-  return Array.from({ length: steps }, (_, i) =>
-    Math.exp(logMin + (logMax - logMin) * (i / (steps - 1))),
-  )
-}
-
-/** Expand a single parameter into its possible values */
-function expandParam(key: keyof SimulationConfig, def: SweepParameterDef): unknown[] {
-  if (def.kind === 'fixed') return [def.value]
-  const meta = PARAM_META[key]
-  if (meta.paramKind === 'strategy') {
-    return (def as { values: StrategyType[] }).values
-  }
-  if (meta.paramKind === 'boolean') {
-    return [false, true]
-  }
-  const numDef = def as NumericSweepRange
-  return numDef.scale === 'log'
-    ? generateLogValues(numDef.min, numDef.max, numDef.steps)
-    : generateLinearValues(numDef.min, numDef.max, numDef.steps)
-}
 
 /** Generate mock SweepRunResult[] from a SweepConfig, ordered by variableOrder */
 function generateMockResults(
   config: SweepConfig,
   variableOrder: (keyof SimulationConfig)[],
 ): SweepRunResult[] {
-  // Build list of all params with their values, in variable order first then remaining
+  // Reorder the sweep config so variableOrder keys come first (affects cartesian product order)
   const allKeys = Object.keys(config) as (keyof SimulationConfig)[]
   const orderedKeys = [
     ...variableOrder,
     ...allKeys.filter((k) => !variableOrder.includes(k)),
   ]
+  const reorderedConfig = Object.fromEntries(
+    orderedKeys.map((k) => [k, config[k]]),
+  ) as SweepConfig
 
-  const paramValues = orderedKeys.map((key) => ({
-    key,
-    values: expandParam(key, config[key]),
+  const expanded = expandSweepConfig(reorderedConfig)
+  return expanded.map((simConfig, i) => ({
+    index: i,
+    config: simConfig,
+    metrics: generateMockMetrics(simConfig, i, expanded.length),
   }))
-
-  // Calculate total combinations
-  const total = paramValues.reduce((acc, p) => acc * p.values.length, 1)
-  if (total === 0) return []
-
-  // Generate cartesian product
-  const results: SweepRunResult[] = []
-
-  for (let i = 0; i < total; i++) {
-    // Decompose flat index into per-param indices
-    const configObj = { ...DEFAULT_CONFIG } as Record<string, unknown>
-    let remainder = i
-    for (let p = paramValues.length - 1; p >= 0; p--) {
-      const pv = paramValues[p]
-      const idx = remainder % pv.values.length
-      remainder = Math.floor(remainder / pv.values.length)
-      configObj[pv.key] = pv.values[idx]
-    }
-
-    // Generate mock metrics — vary based on config values for visual interest
-    const simConfig = configObj as unknown as SimulationConfig
-    const metrics = generateMockMetrics(simConfig, i, total)
-    results.push({ index: i, config: simConfig, metrics })
-  }
-
-  return results
 }
 
 /** Generate plausible mock metrics that vary with config parameters */
@@ -176,7 +116,7 @@ export function ExplorerTab({ onOpenInSimulator }: ExplorerTabProps) {
   const totalCombinations = useMemo(() => {
     if (sweptKeys.length === 0) return 0
     return sweptKeys.reduce(
-      (acc, key) => acc * getStepCount(key, sweepConfig[key]),
+      (acc, key) => acc * expandParamValues(key, sweepConfig[key]).length,
       1,
     )
   }, [sweepConfig, sweptKeys])
