@@ -47,6 +47,23 @@ export function CombinationCounter({ config, onChange }: CombinationCounterProps
     return { breakdown: items, total }
   }, [config])
 
+  // Derive current granularity from actual step counts so the slider tracks position
+  const granularity = useMemo(() => {
+    let sum = 0
+    let count = 0
+    for (const [key, def] of Object.entries(config) as [keyof SimulationConfig, SweepParameterDef][]) {
+      if (def.kind !== 'swept') continue
+      const meta = PARAM_META[key]
+      if (meta.paramKind !== 'numeric') continue
+      const nm = meta as NumericParamMeta
+      const fraction = (def as NumericSweepRange).steps / nm.defaultSweepSteps
+      sum += fraction
+      count++
+    }
+    if (count === 0) return 10
+    return Math.round((sum / count) * 10)
+  }, [config])
+
   // Granularity slider: value 1..10 maps to a multiplier on step counts
   // 10 = current steps, 1 = minimum (2 steps each)
   const handleGranularity = useCallback(
@@ -113,7 +130,7 @@ export function CombinationCounter({ config, onChange }: CombinationCounterProps
       <div className="space-y-1.5">
         <Label className="text-xs text-muted-foreground">Granularity</Label>
         <Slider
-          value={[10]}
+          value={[granularity]}
           min={1}
           max={10}
           step={1}
