@@ -10,16 +10,16 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t
 }
 
-/** Interpolate between blue (low) → yellow (mid) → red (high) */
+/** Interpolate between green (low) → yellow (mid) → red (high) */
 function metricToColor(normalised: number): string {
   const n = Math.max(0, Math.min(1, normalised))
   let r: number, g: number, b: number
   if (n < 0.5) {
     const t = n / 0.5
-    // blue → yellow
-    r = lerp(59, 250, t)
-    g = lerp(130, 204, t)
-    b = lerp(246, 21, t)
+    // green → yellow
+    r = lerp(34, 250, t)
+    g = lerp(197, 204, t)
+    b = lerp(94, 21, t)
   } else {
     const t = (n - 0.5) / 0.5
     // yellow → red
@@ -349,7 +349,7 @@ export function HeatBar({ results, selectedMetric, selectedIndex, onSelect, swep
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span>{formatMetricValue(selectedMetric, minVal)}</span>
         <div className="flex-1 h-2 rounded" style={{
-          background: 'linear-gradient(to right, rgb(59,130,246), rgb(250,204,21), rgb(239,68,68))',
+          background: 'linear-gradient(to right, rgb(34,197,94), rgb(250,204,21), rgb(239,68,68))',
         }} />
         <span>{formatMetricValue(selectedMetric, maxVal)}</span>
       </div>

@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import type { SimulationConfig } from '@/engine/types'
 import { useSimulation } from '@/hooks/useSimulation'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SimulatorTab } from '@/components/SimulatorTab'
 import { ExplorerTab } from '@/components/ExplorerTab'
 
@@ -29,12 +29,13 @@ function App() {
             <TabsTrigger value="explorer">Explorer</TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="simulator" className="min-h-0 flex-1">
+        {/* Render both tabs always-mounted; hide inactive via CSS to preserve state */}
+        <div className={`min-h-0 flex-1 ${activeTab === 'simulator' ? '' : 'hidden'}`}>
           <SimulatorTab simulation={simulation} />
-        </TabsContent>
-        <TabsContent value="explorer" className="min-h-0 flex-1">
+        </div>
+        <div className={`min-h-0 flex-1 ${activeTab === 'explorer' ? '' : 'hidden'}`}>
           <ExplorerTab onOpenInSimulator={openInSimulator} />
-        </TabsContent>
+        </div>
       </div>
     </Tabs>
   )
