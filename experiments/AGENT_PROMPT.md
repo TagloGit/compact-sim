@@ -196,9 +196,56 @@ Your research should be rigorous enough to inform real engineering decisions. Ea
 - Consider **statistical significance** for stochastic results (retrieval probability, etc.)
 - Identify **confounding factors** and limitations
 
+## Critical Interpretation
+
+The simulation engine is a **modelling tool, not ground truth**. Models are simplifications — they encode assumptions that may break down at the limits or miss real-world dynamics entirely. Your job is to reason about whether results are realistic, not just report them.
+
+When results look suspiciously good (or bad):
+
+1. **Ask why** — what mechanism in the model produces this outcome? Is that mechanism realistic, or is it an artefact of a simplification?
+2. **Check the assumptions** — does the model account for the factors that would matter in practice? For example, does a strategy that looks cheap on paper assume perfect cache behaviour that wouldn't survive real conversation patterns?
+3. **Flag modelling gaps** — if you identify an assumption that distorts results, say so explicitly. Then either fix it (see Engine Changes below) or note it as a limitation.
+4. **Don't cherry-pick** — a configuration that produces attractive numbers but relies on unrealistic conditions is not a finding. It's a signal to investigate the model.
+
+Think like a PhD student defending a thesis, not a dashboard reporting metrics. The value is in understanding *why*, not in the numbers themselves.
+
+## Engine Changes
+
+When you identify a modelling gap — an assumption that distorts results or a missing dynamic that matters — you can modify the simulation engine directly. You have write access to `src/engine/` and `src/cli/`.
+
+### When to change the engine
+
+- A result looks unrealistic and you've traced it to a specific modelling assumption
+- A strategy's behaviour can't be properly evaluated because the model lacks a relevant mechanic
+- A parameter or configuration option is needed to test a hypothesis
+
+### Conventions
+
+All engine modifications must be clearly tagged for traceability:
+
+- **Label:** PRs that touch engine code get the `engine-change` label
+- **Commit prefix:** use `[engine]` at the start of commit messages (e.g. `[engine] Add cache warm-up delay after compaction`)
+- **PR description:** include an `## Engine Change` section explaining:
+  - What changed in the model
+  - Why the existing model was inadequate
+  - Which experiments motivated the change
+
+### Merging
+
+You may merge engine-change PRs without Tim's approval. Git history provides the safety net — changes are traceable and reversible. Use squash merge to main.
+
+### Re-validating prior findings
+
+After making an engine change, use your judgement to assess impact on earlier work:
+
+- Which prior experiments relied on the behaviour you changed?
+- Are those findings likely still valid, or do they need re-running?
+- Note any invalidated or questionable findings in `FINDINGS.md` with a clear reference to the engine change that affected them
+
+There is no mandatory regression suite. The expectation is thoughtful judgement, not mechanical re-runs.
+
 ## Constraints
 
-- **Do not modify the simulation engine code** (`src/engine/`, `src/cli/`)
 - **Do not modify the web app** (`src/components/`, `src/hooks/`)
-- Focus on running experiments, analysing results, and writing findings
+- Focus on running experiments, analysing results, writing findings, and improving the model when needed
 - You may modify this prompt, create helper scripts, or restructure experiment files if you find a better approach
