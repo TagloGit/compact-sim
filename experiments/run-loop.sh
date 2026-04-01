@@ -2,7 +2,7 @@
 #
 # Research loop for autonomous compaction strategy research.
 #
-# Usage: ./experiments/run-loop.sh [-v] [max_iterations]
+# Usage: ./experiments/run-loop.sh [-v] [-p prompt_file] [max_iterations]
 #
 # Default mode: quiet terminal with per-iteration summary display.
 # Full stream-json output is always captured to session files for debugging.
@@ -11,6 +11,7 @@
 #   ./experiments/run-loop.sh              # 20 iterations, summary only
 #   ./experiments/run-loop.sh 5            # 5 iterations, summary only
 #   ./experiments/run-loop.sh -v 5         # also stream raw output to terminal
+#   ./experiments/run-loop.sh -p experiments/TEST_PROMPT.md 3   # test harness with stub prompt
 #
 # Control:
 #   touch experiments/PAUSE    # stop after current iteration finishes
@@ -18,9 +19,19 @@
 #
 
 VERBOSE=false
-if [ "$1" = "-v" ]; then
-  VERBOSE=true
-  shift
+PROMPT_FILE="experiments/AGENT_PROMPT.md"
+
+while [[ "$1" == -* ]]; do
+  case "$1" in
+    -v) VERBOSE=true; shift ;;
+    -p) PROMPT_FILE="$2"; shift 2 ;;
+    *)  echo "Unknown flag: $1"; exit 1 ;;
+  esac
+done
+
+if [ ! -f "$PROMPT_FILE" ]; then
+  echo "Prompt file not found: $PROMPT_FILE"
+  exit 1
 fi
 
 MAX_ITERATIONS=${1:-20}
@@ -83,6 +94,7 @@ with open(sys.argv[1], encoding='utf-8') as f:
 # --- Main loop ---
 
 echo "Starting research loop: $MAX_ITERATIONS iterations"
+echo "Prompt: $PROMPT_FILE"
 echo "To pause: touch experiments/PAUSE"
 echo ""
 
@@ -94,7 +106,7 @@ while [ $iteration -lt $MAX_ITERATIONS ]; do
 
   if [ "$VERBOSE" = true ]; then
     # Stream to terminal AND capture to file
-    claude -p "$(cat experiments/AGENT_PROMPT.md)" \
+    claude -p "$(cat "$PROMPT_FILE")" \
       --model sonnet \
       --dangerously-skip-permissions \
       --max-turns 100 \
@@ -103,7 +115,7 @@ while [ $iteration -lt $MAX_ITERATIONS ]; do
       | tee "$session_file"
   else
     # Capture to file only (quiet terminal)
-    claude -p "$(cat experiments/AGENT_PROMPT.md)" \
+    claude -p "$(cat "$PROMPT_FILE")" \
       --model sonnet \
       --dangerously-skip-permissions \
       --max-turns 100 \
