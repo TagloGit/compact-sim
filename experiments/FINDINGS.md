@@ -96,49 +96,22 @@ Sweep over toolResultSize 100–5,000 tokens (log scale, 5 steps), all strategie
 
 ## Compression Ratio Sensitivity (Exp 006)
 
-Sweep over `compressionRatio` [3, 5, 10, 15, 20] for incremental and lcm-subagent at 200 cycles.
+Sweep over `compressionRatio` [3, 5, 10, 15, 20] for `incremental` and `lcm-subagent` at the calibrated baseline (200 cycles).
 
-| compressionRatio | incremental | lcm-subagent | lcm advantage |
-|---|---|---|---|
-| 3 | $14.30 | $13.04 | 8.83% |
-| 5 | $13.50 | $11.44 | **15.23%** (peak) |
-| 10 (baseline) | $11.43 | $10.49 | 8.20% |
-| 15 | $10.74 | $10.21 | 4.88% |
-| 20 | $10.39 | $10.08 | 3.00% |
-
-- lcm-subagent wins at every ratio. Biggest advantage at ratio=5.
-- Both strategies minimise at ratio=20 (higher always cheaper in model) — **modelling artefact**: no quality penalty for over-compression. Default ratio=10 is a defensible practical choice.
-- Compaction events (7) are identical regardless of ratio.
-
----
-
-## lcm-subagent vs Incremental Crossover (Exp 007)
-
-Sweep over `toolCallCycles` [80–200] for incremental and lcm-subagent, calibrated baseline.
-
-| cycles | incremental | lcm-subagent | cheaper | gap |
+| compressionRatio | incremental | lcm-subagent | difference | lcm_advantage% |
 |---|---|---|---|---|
-| 80 | $4.031 | $4.053 | incremental | $0.022 |
-| 100 | $5.120 | $5.092 | **lcm-subagent** | $0.028 |
-| 200 | $11.428 | $10.491 | lcm-subagent | $0.937 |
+| 3 | $14.30 | $13.04 | $1.26 | 8.83% |
+| 5 | $13.50 | $11.44 | **$2.06** | **15.23%** |
+| 10 (baseline) | $11.43 | $10.49 | $0.94 | 8.20% |
+| 15 | $10.74 | $10.21 | $0.52 | 4.88% |
+| 20 | $10.39 | $10.08 | $0.31 | 3.00% |
 
-**Crossover at ~89 cycles.** lcm-subagent advantage widens monotonically past the crossover (~$0.045 per 10 additional cycles). At 80 cycles, incremental wins by only $0.022 — negligible in practice.
+Compaction events: 7 for both strategies at every ratio — ratio does not affect compaction frequency.
 
-**Updated recommendation: use lcm-subagent unconditionally for all Models Agent sessions.** The penalty for short sessions is negligible; the benefit for longer sessions is substantial.
-
----
-
-## incrementalInterval Sensitivity (Exp 008)
-
-Sweep over `incrementalInterval` [15k, 30k, 50k, 80k] × `toolCallCycles` [80, 150, 200].
-
-Key findings:
-- **Model shows 15k always cheapest** — a modelling artefact (compaction priced cheaply, no quality penalty). Do not treat as a production recommendation.
-- **30k (default) is the defensible practical choice** — well-understood, 2–7 compactions per session, avoids over-summarisation risks.
-- At 80k interval, both strategies produce near-identical cost — strategies converge when compaction is infrequent.
-- Confirms Exp 007 crossover: at 80 cycles with 30k+ intervals, incremental marginally wins.
-
-**Engine change**: Added `NumericValuesRange` support so sweep configs can use `"values": [...]` arrays for numeric parameters (previously only min/max/steps/scale ranges were supported).
+**Key findings:**
+1. **lcm-subagent dominates at all compression ratios** — ranking is stable across the full range.
+2. **Peak lcm-subagent advantage at ratio=5 (15.23%)**, not at extreme ratios.
+3. **"Higher compression always cheaper" is a modelling artefact** — the model has no quality penalty for information loss. The default ratio=10 is a defensible practical choice.
 
 ---
 
@@ -160,6 +133,7 @@ Key findings:
 | `compressionRatio` | 10 (default) | Higher appears cheaper in model but is an artefact; 10× is achievable in practice |
 | `incrementalInterval` | 30,000 (default) | 15k appears cheapest in model but is an artefact of cheap compaction; 30k avoids quality risk |
 
+<<<<<<< HEAD
 ### Modelling limitations identified
 
 1. **Compression ratio**: No quality penalty for over-compression. Model always prefers higher ratios.
@@ -183,6 +157,6 @@ Key findings:
 | 003 | #68 | Calibrated baseline (Models Agent params) | done | **Canonical reference**: lcm-subagent $10.49 vs full-compact $20.71 |
 | 004 | #69 | Tool result size sensitivity (100–5000) | done | lcm-subagent cheapest at all sizes |
 | 005 | #70 | Short session regime (80 cycles) | done | full-compaction never fires, 50% more expensive |
-| 006 | #71 | Compression ratio sensitivity | done | lcm-subagent wins at all ratios; ratio=5 gives biggest gap (15%); higher always "cheaper" but artefact |
+| 006 | #71 | Compression ratio sensitivity | done | lcm-subagent wins at all ratios; peak advantage at ratio=5 (15.23%); default ratio=10 recommended |
 | 007 | #73 | lcm-subagent vs incremental crossover | done | Crossover at ~89 cycles; lcm-subagent wins unconditionally in practice |
 | 008 | #74 | incrementalInterval sensitivity | done | 15k "cheapest" but artefact; 30k default recommended; engine change for NumericValuesRange |
