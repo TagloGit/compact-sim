@@ -42,6 +42,10 @@ export function expandParamValues(key: keyof SimulationConfig, def: SweepParamet
   if (meta.paramKind === 'boolean') {
     return [false, true]
   }
+  // Numeric: explicit values array
+  if ('values' in def) {
+    return (def as { values: number[] }).values
+  }
   const numDef = def as NumericSweepRange
   return numDef.scale === 'log'
     ? generateLogValues(numDef.min, numDef.max, numDef.steps)

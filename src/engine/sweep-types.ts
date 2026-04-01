@@ -22,6 +22,11 @@ export interface StrategySweepRange {
   readonly values: StrategyType[]
 }
 
+export interface NumericValuesRange {
+  readonly kind: 'swept'
+  readonly values: number[]
+}
+
 export interface BooleanSweepRange {
   readonly kind: 'swept'
 }
@@ -31,6 +36,7 @@ export type SweepParameterDef =
   | FixedValue<StrategyType>
   | FixedValue<boolean>
   | NumericSweepRange
+  | NumericValuesRange
   | StrategySweepRange
   | BooleanSweepRange
 
