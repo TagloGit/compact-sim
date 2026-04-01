@@ -1,0 +1,21 @@
+{
+  "selectedStrategy": {
+    "kind": "swept",
+    "values": ["lcm-subagent", "incremental"]
+  },
+  "toolCallCycles": {
+    "kind": "swept",
+    "values": [100, 150, 200]
+  },
+  "compressedTokensCap": {
+    "kind": "swept",
+    "values": [20000, 50000, 100000, 200000, 500000]
+  },
+  "toolCallSize": { "kind": "fixed", "value": 75 },
+  "toolResultSize": { "kind": "fixed", "value": 380 },
+  "assistantMessageSize": { "kind": "fixed", "value": 130 },
+  "userMessageFrequency": { "kind": "fixed", "value": 12 },
+  "userMessageSize": { "kind": "fixed", "value": 60 },
+  "systemPromptSize": { "kind": "fixed", "value": 10000 },
+  "pRetrieveMax": { "kind": "fixed", "value": 0.2 }
+}

@@ -182,6 +182,28 @@ Sweep over `pRetrieveMax` [0.0–1.0] × `toolCallCycles` [100, 150, 200] for `l
 
 ---
 
+## compressedTokensCap Sensitivity (Exp 010)
+
+Sweep over `compressedTokensCap` [20k–500k] × `toolCallCycles` [100, 150, 200] for `lcm-subagent` and `incremental`, pRetrieveMax=0.2 (default).
+
+| cap | lcm(100) | adv(100) | lcm(150) | adv(150) | lcm(200) | adv(200) |
+|---|---|---|---|---|---|---|
+| 20,000 | $5.175 | -1.1% LOSE | $7.870 | +3.2% | $10.575 | +7.5% |
+| 50,000 | $5.148 | -0.5% LOSE | $7.842 | +3.5% | $10.547 | +7.7% |
+| 100,000 (default) | $5.092 | **+0.5%** | $7.786 | +4.2% | $10.491 | +8.2% |
+| 200,000 | $5.002 | +2.3% | $7.647 | +5.9% | $10.346 | +9.5% |
+| 500,000 | $4.988 | +2.6% | $7.592 | +6.6% | $10.227 | +10.5% |
+
+Incremental cost is constant (cap-insensitive by design).
+
+**Key findings:**
+1. **Effect is modest**: 25× cap range → only ~3.4% lcm-subagent cost swing. Cap is a secondary lever vs pRetrieveMax.
+2. **Mechanism**: larger cap → retrieval probability ramps more slowly as store fills → lower average retrieval cost → larger lcm advantage.
+3. **Default cap=100k sits at the crossover for 100-cycle sessions** (+0.5%). At cap<100k, lcm marginally loses at 100 cycles.
+4. **At ≥150 cycles, recommendation is cap-insensitive** — lcm wins even at cap=20k (+3.2% at 150 cycles).
+
+---
+
 ## Cross-Experiment Conclusions
 
 ### Strategy recommendation for Models Agent
@@ -208,8 +230,7 @@ Sweep over `pRetrieveMax` [0.0–1.0] × `toolCallCycles` [100, 150, 200] for `l
 
 ### Open questions for future phases
 
-- **compressedTokensCap sensitivity**: How does store fill-rate affect when retrieval overhead kicks in? Smaller cap = earlier retrieval pressure.
-- **Combined stress test**: Under worst-case conditions (short session + elevated pRetrieveMax), which strategy wins?
+- **Combined stress test**: pRetrieveMax=0.3 + cap=50k + short sessions — cumulative pressure from both retrieval dimensions simultaneously.
 - **Crossover shift**: How does the ~89 cycle crossover shift under different compression ratios or tool result sizes?
 - **Latency modelling**: Can compaction frequency trade-offs be evaluated when wall-clock time matters?
 
@@ -228,3 +249,4 @@ Sweep over `pRetrieveMax` [0.0–1.0] × `toolCallCycles` [100, 150, 200] for `l
 | 007 | #73 | lcm-subagent vs incremental crossover | done | Crossover at ~89 cycles; lcm-subagent wins unconditionally in practice |
 | 008 | #74 | incrementalInterval sensitivity | done | 15k "cheapest" is a model artefact; 30k default recommended; engine: NumericValuesRange |
 | 009 | #86 | pRetrieveMax sensitivity | done | lcm-subagent wins structurally (cache, not retrieval); robust at ≥150 cycles; thin margin at 100 cycles |
+| 010 | #88 | compressedTokensCap sensitivity | done | Secondary lever (3.4% swing vs 25× cap range); default 100k well-positioned; ≥150 cycles cap-insensitive |
