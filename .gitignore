@@ -16,3 +16,6 @@ Thumbs.db
 .env
 .env.local
 .claude/settings.local.json
+
+# Experiment data (large, ephemeral simulation outputs)
+experiments/data/
