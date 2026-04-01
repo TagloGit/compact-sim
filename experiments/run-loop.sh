@@ -31,24 +31,37 @@ while [ $iteration -lt $MAX_ITERATIONS ]; do
   iteration=$((iteration + 1))
   echo "=== Iteration $iteration / $MAX_ITERATIONS ==="
 
+  session_file="experiments/data/session-${iteration}.json"
+
   if [ "$VERBOSE" = true ]; then
-    claude -p "$(cat experiments/AGENT_PROMPT.md)" \
+    result=$(claude -p "$(cat experiments/AGENT_PROMPT.md)" \
       --model sonnet \
       --dangerously-skip-permissions \
       --max-turns 100 \
       --verbose \
       --output-format stream-json \
-      | tee "experiments/data/session-${iteration}.json"
+      | tee "$session_file")
   else
-    claude -p "$(cat experiments/AGENT_PROMPT.md)" \
+    result=$(claude -p "$(cat experiments/AGENT_PROMPT.md)" \
       --model sonnet \
       --dangerously-skip-permissions \
       --max-turns 100 \
-      --output-format json \
-      > "experiments/data/session-${iteration}.json"
+      --output-format json)
+    echo "$result" > "$session_file"
   fi
 
   echo "Iteration $iteration complete."
+
+  # Check agent's exit signal (last line of result text)
+  if echo "$result" | grep -q "BLOCKED"; then
+    echo "Agent is blocked. Check issues labelled 'blocked: tim'."
+    break
+  fi
+
+  if echo "$result" | grep -q "RESEARCH_COMPLETE"; then
+    echo "Research complete after $iteration iterations."
+    break
+  fi
 
   # Check for pause signal
   if [ -f experiments/PAUSE ]; then

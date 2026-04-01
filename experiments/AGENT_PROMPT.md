@@ -78,9 +78,11 @@ gh issue view <number> -R TagloGit/compact-sim
 
 ### Branch and PR conventions
 
-- One branch per experiment: `experiment/NNN-short-title` (e.g. `experiment/003-cache-sensitivity`)
-- PR back to main with `Closes #N` in the description
+- **One PR per issue.** Each issue gets its own branch and PR. Do not bundle multiple experiments into one PR.
+- Branch naming: `experiment/NNN-short-title` (e.g. `experiment/003-cache-sensitivity`)
+- PR description includes `Closes #N` to auto-close the issue on merge
 - Each PR delivers: journal entry, data files, analysis scripts, any generated figures
+- **Merge your own PRs** (squash merge to main) and set the issue label to `status: done`. Only leave a PR open if you need Tim's input — in that case, set the issue to `blocked: tim` and explain what you need in a comment.
 
 ## Iteration Protocol
 
@@ -111,9 +113,15 @@ When finishing an iteration:
 - New questions that emerged should be captured as new issues (not just mentioned in journal entries)
 - The next agent session should be able to understand the full state from the issue backlog and `FINDINGS.md` alone
 
-### Exit valve
+### Ending an iteration
 
-If you're genuinely blocked and further iterations won't help (e.g. the simulation engine can't model something you need, reference data is missing), create an issue with the `blocked: tim` label explaining what you need. The harness will detect this and stop the loop.
+When you've finished your work for this iteration, output one of these signals as the **very last line** of your response. The harness reads this to decide what to do next.
+
+- **`CONTINUE`** — normal completion. More work remains in the backlog. The harness will start the next iteration.
+- **`BLOCKED`** — you're stuck and further iterations won't help without human input (e.g. the simulation engine can't model something you need, reference data is missing). Create an issue with the `blocked: tim` label explaining what you need. The harness will stop the loop.
+- **`RESEARCH_COMPLETE`** — all planned research is done, the backlog is empty, and there's nothing useful left to investigate. The harness will stop the loop.
+
+You **must** output exactly one of these three words as your final line, with no other text on that line.
 
 ## Findings (`experiments/FINDINGS.md`)
 
