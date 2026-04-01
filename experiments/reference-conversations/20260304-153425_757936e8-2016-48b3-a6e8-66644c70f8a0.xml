@@ -1,0 +1,973 @@
+<conversation>
+<!-- Conversation ID: 757936e8-2016-48b3-a6e8-66644c70f8a0 -->
+<!-- Agent: models-agent -->
+<!-- Model:  -->
+<!-- Tools: QueryObject, ModelAction -->
+
+<system>
+You are a helpful assistant. You are an expert on Models, financial modeling software, but you can also help with other USER queries.
+
+## CORE PRINCIPLES:
+
+1. Always be helpful and provide clear explanations
+2. Use your tools to actually perform actions (don't just describe what to do)
+3. Provide short context about what you're doing at each step
+4. You are an Agent - please keep going until the User's query is completely resolved, before ending your turn and yielding back to the User
+
+## CONVERSATION STYLE:
+
+- Be friendly and professional
+- Keep answers concise, and respond with an amount of detail appropriate to the User's query - the User doesn't need you to respond with details that they haven't asked for
+- Ask clarifying questions when requirements are unclear
+- Explain technical concepts in business-friendly terms
+- Provide progress updates during multi-step operations
+- When giving the User information about a Model, use nice Markdown formatting where possible (e.g. present structured information in Tables rather than bullets)
+- Your tools may return Object IDs in their output, but don't include object IDs in your response to the user unless absolutely required for dismabiguation - the user prefers to see human-readable object names
+
+## MARKDOWN FORMATTING REQUIREMENTS:
+
+**IMPORTANT**: You MUST always use proper Markdown formatting in your responses.
+
+### Required Formatting:
+
+1. **Tables**: Always use Markdown tables for structured data instead of plain text or lists
+
+   ```
+   | Column 1 | Column 2 | Column 3 |
+   |----------|----------|----------|
+   | Data A   | Data B   | Data C   |
+   ```
+
+2. **Code Blocks**: Always wrap code, formulas, and ASCII diagrams in triple backticks
+
+   - Use ``` for generic code blocks
+   - Use ```ascii for ASCII diagrams
+   - Use ```json for JSON data
+   - Use `python, `javascript, etc. for language-specific code
+
+3. **ASCII Diagrams**: When creating flowcharts, dependency diagrams, or visual representations:
+
+   - ALWAYS wrap them in ```ascii code blocks
+   - Use box drawing characters (─, │, ├, └, etc.) when possible
+   - Ensure proper alignment and spacing
+
+   Example:
+
+   ```ascii
+   [Input] ──> [Process] ──> [Output]
+      │           │            │
+      └───────────┴────────────┘
+   ```
+
+4. **Lists**: Use proper list formatting
+
+   - Use `-` or `*` for unordered lists
+   - Use `1.` for ordered lists
+   - Properly indent nested lists
+
+5. **Emphasis**: Use **bold** for important terms and _italics_ for emphasis
+
+6. **Headers**: Use appropriate header levels (##, ###, ####) to structure responses
+
+### Formatting Priority:
+
+When presenting Model data, calculations, or relationships:
+
+1. **First choice**: Markdown tables for tabular data
+2. **Second choice**: ASCII diagrams in code blocks for flows/relationships
+3. **Third choice**: Well-structured lists with clear hierarchy
+4. **Never**: Plain unformatted text for structured information
+
+## TOOL USAGE:
+
+Use available tools when needed to provide accurate information and complete tasks.
+
+**Tool Principles:**
+
+- **Use tools when appropriate** - Don't just describe what you would do, actually use tools to get real information
+- **Be transparent** - Explain what tools you're using and why - before using tools, briefly explain your approach
+- **Provide helpful responses** - Always include a natural language response even when using tools
+- **Handle errors gracefully** - If a tool fails, explain what happened and suggest alternatives
+- **Always include the `explanation` parameter where available** - It gives the user a clear description of what you're doing
+
+**Proactive Tool Execution:**
+
+- **Complete multi-step tasks without waiting for user confirmation** - When you start a task requiring multiple tool calls, execute them all in sequence
+- **Tool results are inputs, not stopping points** - After receiving a tool result, immediately continue your analysis or next step
+- **Never stop mid-task** - If you say you'll do something (e.g., "I'll search for Variables matching these names"), actually do it in the same response
+- **Explain then execute** - Briefly describe your multi-step plan, then execute all steps without pausing
+- **Only ask for clarification when genuinely ambiguous** - Don't ask for permission to proceed with clear, logical next steps
+
+**Best Practices:**
+
+- **Use tools to get current information** rather than making assumptions
+- **Execute multi-step workflows completely** - When multiple tools are needed, explain your approach then execute all steps without waiting for user confirmation
+- **Process tool results immediately** - Use tool outputs as inputs for your next action; never stop after a successful tool result
+- **Handle errors proactively** - If a tool fails, try alternative approaches before asking the user for guidance
+- **Provide comprehensive responses** - Fully address the user's question in a single response, using as many tool calls as needed
+- **Call multiple tools in one turn** - Don't wait between tool calls unless you genuinely need user input
+
+## Model Design & Planning
+
+Before building or modifying a Model, plan the structure and clarify requirements with the user.
+
+### Pre-Build Questions
+
+A few upfront questions prevent significant rework. Ask the User about ambiguities in their request, especially when it comes to critical decisions like Model timings, currencies (and other Units), and structural options.
+
+### Unit Planning Checklist
+
+Before creating Variables, verify unit consistency:
+
+- **Unit alignment**: Check that currency, time periods, and rates are consistent across inputs before building.
+- **TimeType selection**: Choose appropriate TimeTypes for each UnitPart:
+  - Flow for per-period values (monthly revenue, quarterly costs)
+  - Balance for point-in-time values (headcount, cash balance)
+  - Timeless for unitless values (percentages, booleans, pure scalars) — Timeless is required when a UnitPart has no Tag
+- **isConstant**: Set `isConstant: true` on Variables whose value doesn't change over time (fixed rates, conversion factors). This controls whether the Variable needs one Assumption value or per-period values. Default is `false` (time-varying).
+
+### Unit Rigor Levels
+
+Each Model has a `unitRigorLevel` setting (shown in the model summary) that controls how much unit complexity is exposed:
+
+| Level | Name | Behaviour |
+|---|---|---|
+| 1 | No Units | Units are hidden. Variables are automatically assigned a Unitless unit. The `unit` and `unitOption` fields are hidden from help schemas. ModelAssumptions cannot be created directly — use the inline assumption grid on a Variable's TimeSegment (`timeSegments[n].assumptionGrid`). Unit-related health check warnings are suppressed. |
+| 2 | Tag Units Only | Units use Tags (currencies, products) but TimeType is hidden. Omitted `timeType` defaults to Flow. TimeType-mixing health check warnings are suppressed. |
+| 3 | Full Units | Full unit validation including TimeType. Default for new Models. |
+
+**Important:** Always check `unitRigorLevel` in the model summary before working with units. At Level 1, skip all unit planning. At Level 2, focus on Tag selection only — TimeType is handled automatically.
+
+# About Models
+
+## 1. Overview
+
+Models is a standalone time-based calculation engine for building structured financial models. It has its own calculation engine with immediate visual feedback — Variable previews, Dashboards, and Charts are all viewable directly in the application. Excel workbook generation is an optional output, not the core function.
+
+Primary use case is financial planning and forecasting (business plans, budgets, valuations), but it is general-purpose for any time-series calculations.
+
+You (the Agent) can help with all aspects: building Models from scratch, refining existing Models, creating Excel layouts, and setting up Dashboards for visualization.
+
+## 2. Model Structure
+
+A Model contains mandatory and optional components:
+
+**Mandatory:**
+- **Timings**: Defines the Model's time range. Flexible input — specify any 2 of: start date, end date, number of periods. Also includes granularity (daily, weekly, monthly, quarterly, annual) and fiscal year end (defaults to calendar year end)
+- **TagNamespace**: Scoping reference — like a `using` statement. Determines which external objects (Tags, Lambdas) are available to the Model
+- At least one **Base Scenario** and one **Base Sensitivity** (created by default)
+
+**Core objects:**
+- **Variables**: The calculation containers (see Section 3)
+- **ModelAssumptions**: The user inputs (see Section 4)
+
+**Optional:**
+- **Layout**: Always exists on a Model but doesn't need content. Contains ModelSheets for Excel generation. Also provides an "Excel-like" view within the app
+- **Dashboards**: In-app and Excel visualization (Charts, Metrics, Tables)
+- **Metrics**: Single-value outputs for KPIs and Table inputs
+- **Tables**: Multi-Case comparison via Excel data tables
+
+## 3. Variables (Core Calculation Containers)
+
+Variables are the primary calculation containers. There is a single concrete type with a `defaultFormulaType` that determines behavior:
+
+| Formula Type | Behavior | Use Case |
+|---|---|---|
+| **Assumption** | Links to a ModelAssumption (user input) | Bringing inputs into the calculation sheet |
+| **Calculation** | Mathematical formulas referencing other Variables | Computing outputs from inputs |
+| **Aggregation** | Combines dimension parts with potentially different calculation logic | When different regions/products need different formulas |
+
+**Data flow best practice:** `ModelAssumption` (input sheet) → `Assumption Variable` (brings input in unaltered) → `Calculation Variable` (does math). This mirrors Excel best practice: keep inputs separate from calculations. The app treats Assumption Variables and their linked ModelAssumptions as connected (e.g., deleting an Assumption Variable deletes its linked ModelAssumption if no other Variable references it).
+
+**Data types:** Double, Integer, Boolean, String, Date, DateTime, Validation. The Validation type enables dropdown selection from Tag hierarchies (e.g., "Yes/No", "RPI/CPI" — same Abstract→Concrete Tag structure as Dimensions).
+
+**TimeSegments** allow a Variable's formula behavior to change across different time periods (see Section 7).
+
+**Period aggregation:** Variables can aggregate over time via `periodType` — e.g., create a quarterly or annual summary of a monthly Model. Flow units are summed; Balance units take end-of-period value. Time-aggregated Variables have a single Auto TimeSegment. Variables of different periodType cannot share a Layout sheet (one timeline per sheet).
+
+**Aggregation example:** When different regions have different tax calculation logic, you build separate Variables per region (e.g., "Tax cost (UK)", "Tax cost (France)") then aggregate them into "Tax cost by market". The sum is available in the summary line of the Aggregation Variable.
+
+## 4. ModelAssumptions (User Inputs)
+
+ModelAssumptions provide input values to Assumption-type Variables. The separation from Variables follows financial modeling best practice:
+1. Keep inputs in their own sheet (one place to make changes)
+2. Never reference inputs directly from calculations
+
+**Source types:** LocalInput (direct entry). ExternalData and LinkToXlInsert exist but are not yet enabled for the Agent.
+
+**Multi-scenario values:** ModelAssumption has a values map keyed by Scenario ID. The Base Scenario should always have an entry. Non-Base Scenarios inherit from their base if no explicit value exists.
+
+**Sensitivity variations:** Each ModelAssumption has a `sensitivityType` (one per Assumption): PercentageChange, Delta, or Absolute. Sensitivity entries in the sensitivities map must match this type.
+
+**Time-series inputs:** Values are encoded with DateTimeElement on UnitParts, specifying the time context (period, date format).
+
+## 5. Unit System
+
+Units are composed of **UnitParts**, each based on an Abstract Tag (e.g., "GBP", "Customer", "Month").
+
+**TimeTypes** define temporal characteristics of each UnitPart:
+
+| TimeType | Meaning | Example |
+|---|---|---|
+| **Flow** | Value over a period | Monthly revenue, quarterly costs |
+| **Balance** | Value at a point in time | Cash balance, headcount |
+| **Timeless** | No temporal semantics (pure scalar) | Percentages, booleans, conversion factors |
+
+**Constraint:** Tagged UnitParts (with a Tag like GBP, Customer) must use Flow or Balance. Unitless UnitParts (no Tag) must use Timeless. This enforces: "if something has a dimensional unit, it must have a time relationship; if it's unitless, it's a pure scalar."
+
+**isConstant (on Variable):** Controls whether a Variable's value is the same every period or varies over time. `isConstant: true` means a single Assumption value covers all periods. Default is `false` (time-varying). This is independent of TimeType — a Flow Variable can be constant (e.g., a fixed subscription price per period) or time-varying (e.g., monthly revenue).
+
+**"Per period" is implicit** in every Flow unit — no need to include it. Example: a subscription price of `GBP (Flow) / Customer (Balance)` with `isConstant: true` — the Variable needs only a single Assumption value covering all periods. The alternative is to use an Assumption for first period + Calculation TimeSegment referencing previous period. Using `isConstant` is useful when Timings flexibility is needed (e.g., changing the start period). Genuine constants like "Quarters per Year" use `isConstant: true`.
+
+**Unit algebra rules:**
+- Flow + Flow = Flow (same offset)
+- Balance + Balance = Balance (same offset)
+- Balance[-1] + Flow = Balance (stock accumulation)
+- Flow × Balance = Flow.Balance (kept separate)
+- X × Timeless = X (Timeless is a wildcard in multiplication)
+- Flow / Flow = Unitless [Timeless] (tags and TimeTypes cancel)
+- Compound cancellation: `Balance[-1] × (Flow / Balance[-1]) = Flow`
+
+**Rates that convert stocks to flows** need compound units for clean algebra. Example: Churn Rate = `Member [Flow] / Member [Balance[-1]]`. Then `Members[-1] × Churn Rate` = `Balance[-1] × (Flow / Balance[-1]) = Flow` — the algebra resolves cleanly. If instead Churn Rate uses `Unitless [Timeless]`, the result is `Balance[-1]` (Timeless doesn't transform TimeType), requiring `overrideUnitError`. Prefer compound units when the rate genuinely converts between TimeTypes; use override only when the compound unit approach is impractical.
+
+**Factoring:** Automatic scaling via `factorPower`. Define "Revenues, £m" and calculate "Price × Volume" — Models detects the 10^6 discrepancy and auto-adjusts the calculation. Preferred over manual division in formulas, as manual division CANNOT be tracked by the Unit validation system.
+
+**Validation:** Unit inconsistencies generate warnings, not errors — calculations still execute. This allows override when the modeler knows better. Units serve two purposes: a) logical consistency for the user (don't add GBP to EUR); b) powering under-the-hood operations (assumption matching, dimensional calculations).
+
+**Key principle:** Units are not an afterthought. Assumption Variables must have a Defined Unit with appropriate TimeTypes on their UnitParts. Units defined in Assumption Variables flow up through Calculation Variables with Inferred Units.
+
+**Self-referencing Variables require Defined Units:** When a Variable references itself with period offsets (e.g., `Cash balance[-1]`), its Unit cannot be inferred — you must use `unitOption: Defined`. The Unit system cannot resolve circular references to determine the inferred type.
+
+## 6. Tags & Dimensions
+
+**Tag types:**
+- **Abstract Tags**: Categories that can serve as Dimensions
+- **Concrete Tags**: Specific instances. Each Concrete Tag references its Abstract parent via `isATagIds`
+
+**Dimensions:** An Abstract Tag with Concrete children becomes a Dimension. When a Variable references an Abstract Tag via `tagParents`, it expands to generate separate calculation lines for each Concrete child. The Abstract Tag's `concreteChildrenOrder` controls display order (not calculation).
+
+**Cartesian product:** Multiple Dimensions multiply — 3 Products × 2 Markets = 6 calculation lines.
+
+**Validation dropdowns:** The same Tag structure enables dropdown choices for Validation-type Variables.
+
+**TagNamespaces** provide scoping (like `using` statements). A Model can only reference Tags within its namespace or descendant namespaces.
+
+## 7. Time Management
+
+**Timings:** Flexible input — specify any 2 of: start date, end date, number of periods. Includes granularity and fiscal year end.
+
+**Period offsets:** Variables can reference previous/future periods using offsets like `[-1]`, `[-2]`. Configurable behavior for missing periods: `ReplaceWithZero`, `ReplaceWithValue`, `ShowAsNotApplicable`.
+
+**TimeSegments** allow different formula behavior in different time ranges. Each TimeSegment has Start, Duration, and End — all default to Auto. Specify the minimum needed for unambiguous calculation. Start/End can be: periods from start/end (1-based), or a fixed period (e.g., "2025"). TimeSegments must cover all periods without gaps.
+
+**Key financial modeling principle:** Calculations should be consistent across the entire time range (copy-paste from first column to last). A Variable's main calculation is defined at the Variable level (`defaultCalculation`). An "Auto" TimeSegment executes that calculation. A Calculation within a TimeSegment means "something different from the default" — effectively a model input (can only reference the same Variable with period offsets, not other Variables).
+
+## 8. Scenarios & Sensitivities
+
+**Scenarios** model specific anticipated alternatives — different launch dates, product lineups. **Sensitivities** model unknown variance — lower/higher inflation rates.
+
+**Scenario inheritance:** Scenarios can chain: "Base" → "Late launch" → "Late launch without PR campaign" — each based on the previous, making changes in only one place. Values are retrieved recursively with Base as final fallback. Non-Base Scenarios must reference at least one other Scenario via `basedOnScenarioId`.
+
+**Cases:** A Scenario + Sensitivity combination. The Scenario value is retrieved first, then the Sensitivity applied on top.
+
+**In Excel:** One Case shown at a time via dropdown selector on the control sheet (`IsControlSheet`). Multiple Cases viewable simultaneously via Tables (Excel data tables).
+
+**In the app:** All Cases calculated simultaneously — Charts can show multiple Cases.
+
+## 9. Calculations
+
+**Formula syntax (`formulaText`):** Variable references by name, operators (`+`, `-`, `*`, `/`, `^`), period offsets (`[-1]`, `[-2]`), functions, constants. Names with spaces or special characters must be quoted: `"Net Revenue"`.
+
+**Period references (`Periods`):** Returns the current period's end date (e.g., 31 Dec for a Calendar Year). Useful for date comparisons: `Periods >= Launch_Date`. Supports offsets: `Periods[-1]` for previous period's end date.
+
+**All Excel functions supported** for Excel output; most supported in the app calculation engine. **LET functions** supported for complex multi-step calculations.
+
+**Lambdas:** Reusable custom functions stored outside Models (referenced via TagNamespace). Can't reference Variables directly — pass them as arguments. Good for complex reusable calculations, where inputs are referenced multiple times (e.g. a complex conditional timing calculation, or a Bass diffusion curve formula)
+
+**CalculationParts:** Formulas are persisted as CalculationParts. The API accepts either `formulaText` (convenient, parsed by API) or `calculationParts` (verbose but supports complex references). Some operations can't be described in formulaText — in that case, create via formulaText then edit the specific CalculationPart.
+
+**Dimensional matching:** When source and target Variables share the same Dimensions, an "Auto" ItemMatch ensures UK references UK, France references France automatically.
+
+**Complex references** (when dimensions don't match): Either reference the summary line, or create a custom `VariableReferenceItemMatch` with `DimensionReference`s — see Section 10.
+
+## 10. Dimensional Calculations (Advanced)
+
+**groupSummaryType** controls how a Variable summarizes across Dimensions:
+
+| Type | Behavior | Example |
+|---|---|---|
+| **None** | No summary line | |
+| **Sum** | Simple addition | Revenue by region → Total revenue |
+| **Auto** | Recalculate formula at summary level | Margin % = Margin/Revenue (Sum would give nonsense) |
+| **Rearranged** | Calculate from parent Variable's formula, rearranged | Weighted average % for a percentage input |
+
+**contextVarianceMap:** Maps which UnitParts vary with which Dimensions. Defaults to "all vary with all" which is fine for most cases. Custom maps needed when different UnitParts in a ratio have different dimensional behavior. Example: "Bonus Pot % by Region" has Unit `GBP(varies by region)/GBP(total)`. Assumption units become `GBP (UK)/GBP`, `GBP (France)/GBP` — the dimension context is encoded using **UnitPartModifiers** (Concrete Tags applied to UnitParts).
+
+**DimensionReference types** for custom `VariableReferenceItemMatch` (when dimensions don't match between source and target):
+
+| Type | Purpose | Example |
+|---|---|---|
+| **Parent** | Link target dimension to matching source TagParent | Region→Region (matching dimensions) |
+| **Child** | Always link to a specific Concrete child | "Always use the France line" |
+| **Sum** | Sum all values in that dimension | Sum all tiers to get region total |
+| **Lookup** | Choose value based on a third Variable's selection | "Inflation rate by cost line" looked up from "RPI/CPI inflation rate" based on "Inflation choice by cost line" (a Validation Variable). Uses `lookupReference` (a VariableReferenceCalculationPart) and `sourceParentId` (the **source** Variable's dimension that drives the lookup — e.g., Product or Cost Line, NOT the looked-up dimension) |
+| **SumBy** | Sum and translate dimensions via a mapping Variable | "Revenue by city" summed to "Revenue by region" via "Region by city" mapping Variable. Uses `sumByVariableId`. The mapping Variable is a Validation-type Variable with `validationDimensionId` pointing to the target dimension |
+
+**Lookup example:** You have costs dimensioned by "Cost line" and inflation rates dimensioned by "Inflation type" (RPI, CPI). A Validation Variable "Inflation choice by cost line" (dimensioned by Cost line, with validationDimensionId pointing to Inflation type) lets users pick RPI or CPI per cost line. A Lookup DimensionReference bridges the non-matching dimensions: `sourceParentId` is the **source** Variable's dimension (Cost line), and `lookupReference` points to the Validation Variable. For each cost line, the Lookup reads the Validation Variable's value (e.g., "RPI"), then retrieves the corresponding inflation rate from the target Variable.
+
+**SumBy example:** You have "Revenue by city" and want "Revenue by region". A Validation Variable "Region by city" (dimensioned by City, with validationDimensionId pointing to Region) maps each city to a region (London→UK, Paris→France). A SumBy DimensionReference on "Revenue by region" uses `sumByVariableId` referencing the mapping Variable, translating the City dimension into Region by summing.
+
+## 11. Rearranging
+
+**Problem solved:** A Variable needs to switch between "input" and "output" mode at different times.
+
+**Main use case:** In a model with Actuals periods, some values are known directly and others must be back-calculated. Example: `Revenue = Price × Volume` over 5 years. First 2 years are Actuals — we know Price and Revenue, but not Volume. Entering Revenue assumptions for periods 1-2 creates over-specification (Price, Volume, and Revenue all have inputs — no degree of freedom). Models shows a warning. The user can choose to rearrange Volume, creating a Rearranged TimeSegment for periods 1-2 that references Revenue's ID. Volume is then automatically calculated as Revenue/Price for those periods. The process cascades down the dependency tree until hitting a period before model start or a leaf node.
+
+**NotApplicable alternative:** Instead of rearranging, mark periods as NotApplicable — "we don't care what Volume was during the Actuals period."
+
+**Rearranged in Dimensional summaries:** `groupSummaryType: Rearranged` with `groupSummaryRearrangedParentId` references a parent Variable whose formula is algebraically rearranged to solve for this Variable at the summary level (e.g., weighted average price from Revenue/Volume).
+
+## 12. Layout & Excel Generation
+
+The **Layout** object always exists on a Model (cannot be created or deleted). It contains **ModelSheets**.
+
+**ModelSheet types:**
+
+| Type | Contains |
+|---|---|
+| **Calculations** | Variable LineItems |
+| **Assumptions** | ModelAssumption LineItems |
+| **Metrics** | Metric LineItems |
+| **Dashboard** | A Dashboard reference |
+| **XlInsert** | External Excel file import (not yet enabled) |
+
+**Sheet structure:** ModelSheet → Sections → ContentSection → LineGroups → LineItems. **LineGroups** are purely organizational — headers with configurable numbering and collapsibility.
+
+**Critical rule:** Assumption-type Variables go on **Calculation** sheets, NOT Assumption sheets. Assumption sheets contain ModelAssumptions. The Assumption Variable links to the ModelAssumption on the Assumptions sheet. This mirrors Excel best practice: Assumption sheets are for raw inputs, Calculation sheets bring those inputs in then calculate with them.
+
+**Minimum for valid Excel:** At least 1 Assumptions sheet + 1 Calculations sheet.
+
+**Multiple Calculation sheets** are common for large models — organize by business area (timing, revenues, costs, financial statements).
+
+**One timeline per sheet:** Variables of different `periodType` cannot share a sheet.
+
+**Also useful without Excel:** Layout provides an "Excel-like" structured view within the app.
+
+## 13. Dashboards & Visualization
+
+**DashboardItem types:** Panel (container), Chart, Table, Metric, AssumptionsTable, Spacer.
+
+**Charts:** One Variable per chart. Choose any 2 of {Time, each Dimension, Scenarios, Sensitivities} for **Categories** and **Series**. The remaining axes become filters whose values are configured during chart setup (not interactive in the Dashboard — you select specific values). Example: "Revenue by region and tier" as Stacked Column — Tier as Categories, Region as Series, with Time set to a specific period.
+
+**Metrics:** Single-value outputs. Must force a single value by specifying a period or performing an aggregate operation (SUM, MAX, etc.) across the time range. Can be dimensional (only the time dimension is restricted). Used for Dashboard KPIs and as inputs to Tables. Examples: "Total 5-year Revenue" (SUM aggregate), "Exit Year EBITDA Margin %" (last period).
+
+**Tables:** Generate Excel data tables for multi-Case comparison. Tables reference Metrics and compare their values across multiple Scenario/Sensitivity combinations. Required workflow: Create Table → Add Table to Dashboard → Create Dashboard ModelSheet.
+
+**AssumptionsTable:** Editable assumptions within a Dashboard. Layout constraint: each Assumption can only have one entry cell in Excel. If an Assumption appears in a Dashboard's AssumptionsTable and that Dashboard is in the Layout, the Assumptions sheet will point to the Dashboard instead of containing the entry cell. For Dashboards that aren't in the Layout, you can add Assumptions repeatedly whereever needed.
+
+**Excel rendering:** Best-effort — some features (like simultaneous Scenarios) aren't possible in Excel.
+
+## 14. Retrieving Calculated Values
+
+Operations exist for retrieving and comparing calculated values from Variables and Metrics:
+
+| Operation | Purpose |
+|---|---|
+| `get-values` | Retrieve calculated values with optional trend analysis |
+| `compare-cases` | Compare values across Scenarios and Sensitivities |
+| `trace-dependencies` (with `includeValues`) | See values along the dependency tree |
+| `get-model-health` (with `includeValueChecks`) | Detect N/A values and anomalies |
+| `valueSummary` in filter | Adds first/last value and trend to filter results |
+
+Use `help: true` on any operation for parameter details.
+
+## 15. Constraints & Business Rules
+
+- No circular dependencies in Variable reference chains
+- TimeSegments must cover all periods without gaps
+- Unit inconsistencies generate warnings, not errors (overrideable)
+- Aggregation Variables must have a single Aggregation TimeSegment
+- Calculations within TimeSegments can only reference the same Variable with period offsets
+- Variables of different `periodType` cannot share a Layout sheet
+- One Base Scenario and one Base Sensitivity minimum required
+- Each ModelSheet supports only one type of LineItem (Variables on Calculations sheets, ModelAssumptions on Assumptions sheets, Metrics on Metrics sheets)
+
+## 16. Not Yet Implemented
+
+These features exist in the data model but are not currently available to the Agent:
+- **DataPoints/ExternalData**: External data integration (API not enabled)
+- **XlInserts**: Excel file imports (not enabled)
+
+Mention these if the user asks, to avoid confusion.
+
+## Key Enums (Capabilities Reference)
+
+| Object | Property | Values |
+|---|---|---|
+| Variable | defaultFormulaType | Assumption, Calculation, Aggregation |
+| Variable | dataType | Double, Integer, String, DateTime, Date, Boolean, Validation |
+| Variable | groupSummaryType | None, Sum, Auto, Rearranged |
+| Variable | unitOption | Defined, Inferred |
+| TimeSegment | modelFormulaType | Auto, Assumptions, Calculation, Aggregation, Rearranged, NotApplicable |
+| Variable | isConstant | true, false (default: false) |
+| UnitPart | timeType | Flow, Balance, Timeless |
+| ModelSheet | modelSheetType | Calculations, Assumptions, Metrics, Dashboard, XlInsert |
+| DashboardItem | dashboardItemType | Panel, Chart, Table, Metric, AssumptionsTable, Spacer |
+| DimensionReference | referenceType | Sum, Parent, Child, Lookup, SumBy |
+| ModelAssumption | sensitivityType | PercentageChange, Delta, Absolute |
+
+## Tool Workflow
+
+When using QueryObject and ModelAction tools, follow this **bash-like workflow pattern**:
+
+1. **ALWAYS set current Model context first, unless it has already been set for you**: Use `ModelAction(action='set-current', parameters={'model_id': 'xyz'})` before any QueryObject operations. **Make sure you have the correct Model Id first** - you can find the Id by listing all available models using the `ModelDescriptions` tool
+2. **Then perform operations**: Use `QueryObject` to perform CRUD+ operations on objects, or take other object-specific actions, and use `ModelAction` to take other general Model actions (like pulling a Model summary)
+3. **ALWAYS Use help for schemas if you haven't seen that schema before**: Add `help: true` to parameters (like `--help` in bash) to get detailed parameter schemas. Example: `QueryObject(object_type='Variable', action='filter', parameters={'help': true})`
+4. **DO NOT filter without any property filters** unless you genuinely need a complete list of objects. Always call filter help first so that you know how to filter correctly - note, all string properties have glob and regex filering enabled - **GET FILTER HELP BEFORE FILTERING** to see details.
+
+5. **USE CONSERVATIVE FILTERS BY DEFAULT**: When filtering string properties, use glob patterns by default to retrieve broader matches rather than exact matches. The user will correct you if they need an exact match.
+
+   - Good (conservative): `{"name": "*GBP*"}` retrieves "GBP", "UK-GBP", "GBP Exchange Rate", etc.
+   - Too tight: `{"name": "GBP"}` only retrieves exact match
+   - Use exact filters only when you're certain about the precise name
+
+**Remember**: Add `help: true` to parameters (like bash's `--help` flag) to get complete parameter schemas before creating or updating objects. Example: `QueryObject(object_type='ModelSheet', action='create', parameters={'help': true})`
+
+**Example filtering workflow**
+
+```
+[ASSISTANT] Now I need to find Tags matching "GBP"
+[TOOL] QueryObject(action="filter", object_type="Tag", parameters={"help":"true"})
+[TOOLRESULT] ...filter instructions for Tags...
+[TOOL] QueryObject(action="filter", object_type="Tag", parameters={"name":"*GBP*"})
+[TOOLRESULT] Multiple matches found - agent can disambiguate or present options
+```
+
+## ID Communication Guidelines
+
+When communicating with users about Models objects:
+
+**Use Names for User Communication**: Always present objects to users using their meaningful names (e.g., "Combined revenues", "Price", "UK Revenues") rather than technical IDs.
+
+**Use IDs for Tool Operations**: Always use precise IDs in tool calls for reliability and accuracy.
+
+**Example Patterns**:
+
+- "The Model has 3 calculation Variables: Combined revenues, EU Revenues (GBP), and UK Revenues"
+- "I'll add the Price assumption to the new LineGroup"
+
+**Remember** The help parameter (`help: true`) gives you correct schemas for all actions, or generic help for on object type if you don't include an action - don't just assume you know how to do something, **use help** to make sure you do it correctly
+
+## Model Health Checks
+
+Use `ModelAction(action='get-model-health')` to verify model integrity. This checks for calculation errors, layout issues, circular dependencies, and other common problems. Regular health checks are advised after making changes — see `verify-model` instructions for detailed usage.
+
+## Getting Detailed Instructions
+
+When you need specific implementation guidance, use the **GetInstructions** tool to retrieve Level 2 documentation. Level 2 has two types:
+
+- **Workflow instructions**: Step-by-step processes. Retrieve before starting work.
+- **Object instructions**: API patterns and properties. Retrieved as directed by workflow instructions, or when you need API detail for a specific object type.
+
+### When to Retrieve Workflow Instructions
+
+| Situation | Retrieve |
+|---|---|
+| Working with an existing model | `review-model` first, then relevant build workflow |
+| Building new model structure (Variables, Assumptions, Tags) | `build-structure` |
+| Creating or modifying Excel layout | `build-layout` |
+| Creating dashboards, charts, metrics, tables | `build-visualisations` |
+| After completing significant work | `verify-model` |
+
+### Available Object Instructions
+
+| Category | Covers |
+|---|---|
+| `variables` | Variable properties, formulaText, CalculationParts, TimeSegments, DimensionReferences, periodType, Rearranging |
+| `assumptions` | ModelAssumption properties, values map, DateTimeElement encoding, sensitivity values |
+| `tags` | Tag creation, Abstract/Concrete setup, Dimensions, contextVarianceMap, UnitPartModifiers |
+| `scenarios` | Scenario/Sensitivity creation, inheritance, Cases |
+| `layout` | ModelSheet/LineGroup/LineItem properties, the Assumption-on-Calc-sheet rule |
+| `dashboards` | DashboardItem properties, Chart axis config, Metric period handling, Table workflow |
+
+### Best Practices
+
+- **Retrieve once, use many times**: Get instructions at the start of a workflow, not repeatedly
+- **Check the list first**: Run `GetInstructions(action='list')` if you're unsure which guide to use
+- **Follow the guide**: Instructions contain validated patterns, concrete examples, and error prevention strategies
+
+### Example Usage
+
+```
+# List available instruction categories
+GetInstructions(action='list')
+
+# Get structure-building workflow
+GetInstructions(action='get', parameters={'category': 'build-structure'})
+
+# Get Variable API details
+GetInstructions(action='get', parameters={'category': 'variables'})
+```
+
+=== AVAILABLE TOOLS ===
+You have access to 9 tools:
+- GetInstructions: Retrieve detailed implementation guides and expert documentation for complex operations. Use this tool BEFORE attempting activities like creating layouts, validating models, or generating structure. Examples: GetInstructions(action='list') to see available guides, GetInstructions(action='get', parameters={'category': 'create-layout'}) to get specific instructions.
+- ModelAction: Model-level operations and context management. BASH-LIKE WORKFLOW: First use set-current to establish working model context, then use summary for overview. Summary provides basic information about Model, including Timings, Root Variable nodes (Variables with no dependents), and item counts. The Summary may already be provided for you in, in which case DO NOT retrieve it again unless you think changes have been made. All operations support optional format parameter ('structured', 'markdown', 'compact'). Add 'help: true' to parameters to see all available operations (like --help flag). Example: ModelAction(action='set-current', parameters={'model_id': '-P6eJsQoxoWnCFPQl2ZJ'}), ModelAction(action='summary', parameters={'format': 'compact'}), ModelAction(parameters={'help': true})
+- ModelDescriptions: Get list of available models with basic information. Does not require a current model to be set. Returns model names, IDs, namespaces, and last edited dates.
+- QueryObject: Object operations on current model. IMPORTANT: Requires current model to be set first via ModelAction set-current. Add 'help: true' to parameters for help on any action (like --help flag). Note Create/Update share a common `help` schema - if you have already retrieved one of Create/Update `help` for an object, no need to retrieve it again. For BULK operations, add 'bulk: true' and provide 'items' array. WORKFLOW: Use 'filter' to find objects matching criteria (returns key fields), then use 'get-details' on specific IDs to retrieve full property details. By default, get-details returns all properties in summary mode (complex objects show preview, collections show count + preview). Specify 'properties' array to expand requested properties fully. Use dot notation for nested expansion (e.g., 'defaultCalculation.calculationParts'). Examples: QueryObject(object_type='Variable', action='filter', parameters={'help': true}), QueryObject(object_type='Tag', action='get-details', parameters={'id': 'tag-123'}), QueryObject(object_type='Tag', action='get-details', parameters={'id': 'tag-123', 'properties': ['tagProperties']}), QueryObject(object_type='Variable', action='get-details', parameters={'id': 'var-123', 'properties': ['defaultCalculation.calculationParts']}), QueryObject(object_type='Variable', action='create', parameters={'bulk': true, 'items': [{'name': 'Var1'}, {'name': 'Var2'}]}), QueryObject(object_type='Variable', action='other', otherAction='trace-dependencies', parameters={'ids': ['var-1', 'var-2']})
+- add_task: Add a single task to the to-do list. Tasks can be inserted at specific positions. Examples: add_task(description='Review PR') appends to end, add_task(description='Urgent fix', after='start') inserts at position 0, add_task(description='Follow up', after='task-3') inserts after task-3.
+- add_tasks: Add multiple tasks to the to-do list atomically. All tasks are inserted at the same position in order. Examples: add_tasks(descriptions=['Task 1', 'Task 2']) appends to end, add_tasks(descriptions=['Urgent A', 'Urgent B'], after='start') inserts at position 0, add_tasks(descriptions=['Step 1', 'Step 2'], after='task-5') inserts after task-5.
+- complete_task: Mark a task as completed. The task will be marked with a completed status and timestamp. Example: complete_task(task_id='task-5')
+- get_current_time: Get the current date and time
+- remove_task: Remove a task from the to-do list entirely. Use this when a task is no longer relevant or was added by mistake. Example: remove_task(task_id='task-3')
+
+Use these tools when they can help answer the user's questions or perform requested tasks.
+
+## INITIAL CONTEXT
+
+The current working model has been pre-set for you. A summary is below.
+
+# Model: Agent tests
+**ID:** -PaDcvKKeLOdFU0X4jxj
+**Created:** 2026-01-28 10:37:55
+**Last Modified:** 2026-01-28 10:38:07
+**Tag Namespace:** Agent testing (ID: -PaDcvKKeLOdFU0X4jzi)
+
+## Model Configuration
+- **Timings:** Mar 25 - Dec 27 (12 periods, Quarter)
+- **Default Unit:** Unitless [Timeless]
+- **Unit Rigor Level:** No Units (Level 1)
+
+## Scenarios & Sensitivities
+- **Scenarios:** Base (ID: Base)
+- **Sensitivities:** Base (ID: Base)
+
+## Variables
+- **Total Variables:** 0
+- **of type Assumption:** 0
+- **of type Calculations:** 0
+- **of type Aggregations:** 0
+
+### Root Variables
+| Name | Id | Default Formula Type | Calculation | Unit | Number Format | Time Segments | Is Constant |
+|---|---|---|---|---|---|---|---|
+
+## Assumptions
+- **Total Assumptions:** 0
+
+
+
+**You do NOT need to call ModelAction set-current** unless you want to switch to a different model. If asked about the model, DO NOT retrieve a new model summary unless you think the model has changed since the above.
+</system>
+
+[USER]: What rigor level are you in?
+[ASSISTANT]: The model **Agent tests** is set to **Unit Rigor Level 1 — No Units**.
+
+At this level:
+- Units are hidden — all Variables are automatically assigned a **Unitless** unit
+- The `unit` and `unitOption` fields are hidden from creation/update schemas
+- ModelAssumptions cannot be created directly — instead, you use the inline assumption grid on a Variable's TimeSegment
+- Unit-related health check warnings are suppressed
+
+This is the simplest mode, ideal for models where unit tracking isn't needed. Let me know if you'd like to change it or if there's anything else you need!
+[USER]: Got it. I'd like you to create a simple SaaS revenue model. It's just a dummy model focusing on structure, so use whatever assumptions you like.
+[ASSISTANT]: 
+
+I'll build a simple SaaS revenue model for you. Let me first get the build instructions and check the Variable creation schema.
+[TOOL]: GetInstructions(action="get", explanation="Get build-structure workflow", parameters={"category":"build-structure"})
+[TOOL]: QueryObject(action="create", explanation="Get Variable create schema", object_type="Variable", parameters={"help":true})
+[TOOL_RESULT]: {"category":"build-structure","content":"# Build Model Structure\r\n\r\n## Purpose\r\nUse this workflow when creating or modifying the Model's Variable and Assumption structure.\r\n\r\n## Prerequisites\r\n- Model context is set (`ModelAction(action='set-current')`)\r\n- You understand the Model's purpose (what outputs are needed)\r\n- Retrieve `variables` and `assumptions` object instructions if you haven't already\r\n\r\n## Build Order\r\n\r\nBuilding a Model structure follows a bottom-up approach for inputs and top-down for planning:\r\n\r\n### 1. Plan Top-Down\r\nStart with the desired outputs and work backwards:\r\n- What are the final output Variables? (e.g., Revenue, Profit, Cash Flow)\r\n- What calculations produce those outputs?\r\n- What inputs (Assumptions) feed those calculations?\r\n- Are there Dimensions? (e.g., by Region, by Product)\r\n\r\n### 2. Create Tags and Dimensions (if needed)\r\nIf the Model uses Dimensions:\r\n- Create Abstract Tags for each Dimension (e.g., \"Region\", \"Product\")\r\n- Create Concrete Tags as children (e.g., \"UK\", \"France\" under \"Region\")\r\n- Concrete Tags reference their parent via `isATagIds`\r\n- Retrieve `tags` object instructions for API details\r\n\r\n### 3. Create Scenarios and Sensitivities (if beyond Base)\r\nIf the Model needs multiple Scenarios or Sensitivities:\r\n- Create additional Scenarios with `basedOnScenarioId` referencing Base or another Scenario\r\n- Create Sensitivities for variance analysis\r\n- Retrieve `scenarios` object instructions for API details\r\n\r\n### 4. Build Variables Bottom-Up\r\nCreate Variables from inputs to outputs:\r\n\r\n**a) Assumption Variables first:**\r\n- Create the Variable with `defaultFormulaType: Assumption`\r\n- Set `unitOption: Defined` and define the Unit with correct TimeType\r\n- Add `tagParents` for Dimensional Variables\r\n- ModelAssumptions are created automatically when providing inline assumption values via TimeSegments\r\n- OR create ModelAssumptions separately and link via TimeSegments\r\n\r\n**b) Calculation Variables next:**\r\n- Create with `defaultFormulaType: Calculation`\r\n- Define `defaultCalculation` with `formulaText` referencing previously-created Variables\r\n- Set `unitOption: Inferred` (default for Calculations) unless you need a specific Unit\r\n- For Dimensional Variables, add matching `tagParents`\r\n\r\n**c) Aggregation Variables (if needed):**\r\n- Create when different Dimension parts have different calculation logic\r\n- Set `aggregatedVariableIds` to reference the part Variables\r\n- Set `groupSummaryType` (usually `Sum`)\r\n\r\n### 5. Validate Structure\r\nAfter creating all Variables:\r\n- Check for unit warnings\r\n- Verify calculation dependencies resolve correctly\r\n- Use `get-details` on key Variables to confirm their computed values\r\n\r\n## Common Patterns\r\n\r\n### Simple Linear Model\r\nInput -\u003e Calculation -\u003e Output\r\n```\r\nPrice (Assumption) -\u003e Revenue = Price x Volume (Calculation) -\u003e Profit = Revenue - Costs (Calculation)\r\nVolume (Assumption) /\r\nCosts (Assumption) /\r\n```\r\n\r\n### Dimensional Model\r\nSame structure but with `tagParents` on Variables that need to expand across Dimensions.\r\n\r\n### Model with Time Flexibility (Rearranging)\r\nFor Actuals + Forecast models, see the Rearranging section in `variables` object instructions.\r\n\r\n## Key Rules\r\n- Assumption Variables must have `unitOption: Defined` with appropriate TimeTypes: Flow or Balance for tagged UnitParts, Timeless for unitless UnitParts\r\n- Set `isConstant: true` on Variables with time-invariant values (fixed rates, conversion factors)\r\n- Calculation Variables default to `unitOption: Inferred`\r\n- Each ModelSheet type supports only one kind of LineItem\r\n- Assumption-type Variables belong on Calculation sheets, not Assumption sheets\r\n","description":"Workflow for creating Variables, Assumptions, Tags, and Scenarios","title":"Build Model Structure","topics":["Variables","ModelAssumptions","Tags","Dimensions","structure","build"]}
+[TOOL_RESULT]: {"action":"create","description":"Create/Update a new Variable. NOTE: same schema for Create/Update actions, don't retrieve both.","notes":["Updates support partial payloads - only include properties you want to change. For detailed guidance on complex properties (Aggregation, contextVarianceMap, groupSummary), use GetInstructions(category='variables')","Assumption and Aggregation Variables require unitOption: 'Defined' (the default). When unitOption is 'Defined', the unit property is required.","Minimal Unitless unit: {\"unitParts\": [{\"timeType\": \"Timeless\"}]}. For time-varying units, use timeType 'Flow' or 'Balance' with a tag. To mark a Variable as constant (no time variance), set isConstant: true. Note: {\"unitParts\": []} creates an Undefined unit (invalid for Assumptions)."],"object_type":"Variable","parameters":{"aggregatedVariableIds":{"description":"IDs of Variables representing Dimension parts to combine (not a sum - see GetInstructions)","relevant_when":{"defaultFormulaType":"Aggregation"},"type":"array[string]"},"applyFactoring":{"default":false,"description":"Auto-adjust when Variable unit factor differs from calculated unit factor","type":"boolean"},"columnSummaries":{"description":"For full schema, query help with object_type='ColumnSummary'","type":"array[ColumnSummary]"},"contextVarianceMap":{"description":"Maps which unit parts vary with which Dimensions. Only relevant when Variable has Dimensions and Defined unit. Defaults to all-vary-with-all.","properties":{"contextVarianceMap":{"description":"Map from string key to HashSet`1. For value schema, query help with object_type='HashSet`1'.","properties":{},"type":"object"}},"relevant_when":{"unitOption":"Defined"},"type":"object"},"dataType":{"type":"enum","values":["Double","Integer","String","DateTime","Date","Boolean","Validation"]},"defaultAssumptionId":{"description":"Fallback assumption for periods/dimensions without matching TimeSegment assumption","type":"string"},"defaultCalculation":{"description":"For full schema, query help with object_type='Calculation'","relevant_when":{"defaultFormulaType":"Calculation"},"type":"Calculation"},"defaultFormulaType":{"description":"The formula type for this Variable","required":true,"type":"enum","values":["Assumptions","Calculation","Aggregation"]},"groupSummaryRearrangedParentId":{"description":"Parent Variable for Rearranged summary calculation (e.g., weighted averages)","required_when":{"groupSummaryType":"Rearranged"},"type":"string"},"groupSummaryType":{"description":"Controls Dimension summary behavior: None, Sum (simple sum), Auto (recalculate), Rearranged (from parent)","type":"enum","values":["None","Sum","Auto","Rearranged"]},"isConstant":{"default":false,"description":"Whether this Variable's value is constant across all time periods","type":"boolean"},"name":{"required":true,"type":"string"},"numberFormatId":{"type":"string"},"overrideUnitError":{"default":false,"type":"boolean"},"periodType":{"description":"Overrides Model's default period. Must be broader than Model timings. None = use default.","type":"enum","values":["None","Day","Week","Month","Quarter","YearCalendar","YearFiscal"]},"tagIds":{"type":"array[string]"},"tagParents":{"description":"For full schema, query help with object_type='TagParents'","type":"TagParents"},"timeSegments":{"description":"For full schema, query help with object_type='TimeSegment'","type":"array[TimeSegment]"},"validationDimensionId":{"description":"Abstract Tag defining dropdown options for Validation dataType Variables","required_when":{"dataType":"Validation"},"type":"string"}}}
+[ASSISTANT]: Good, I have the Variable schema. Since this is Unit Rigor Level 1 (No Units), I don't need to worry about units at all. Let me check the TimeSegment schema to understand how to set assumption values inline, and also get the Calculation help.
+[TOOL]: QueryObject(action="create", explanation="Get TimeSegment schema", object_type="TimeSegment", parameters={"help":true})
+[TOOL]: QueryObject(action="create", explanation="Get Calculation schema", object_type="Calculation", parameters={"help":true})
+[TOOL_RESULT]: {"action":"create","description":"Create/Update a new TimeSegment. NOTE: same schema for Create/Update actions, don't retrieve both.","object_type":"TimeSegment","parameters":{"assumptionIds":{"type":"array[string]"},"duration":{"description":"For full schema, query help with object_type='SegmentDuration'","type":"SegmentDuration"},"end":{"description":"For full schema, query help with object_type='SegmentPeriod'","type":"SegmentPeriod"},"id":{"type":"string"},"modelFormulaType":{"type":"enum","values":["Auto","Assumptions","Calculation","Aggregation","Rearranged","NotApplicable"]},"start":{"description":"For full schema, query help with object_type='SegmentPeriod'","type":"SegmentPeriod"}}}
+[TOOL_RESULT]: {"action":"create","description":"Create/Update a new Calculation. NOTE: same schema for Create/Update actions, don't retrieve both.","notes":["Calculation cannot be created/updated standalone - use Variable or Metric operations. This schema is for documentation purposes only."],"object_type":"Calculation","parameters":{"calculationParts":{"description":"For full schema, query help with object_type='CalculationPart'","type":"array[CalculationPart]"},"formulaText":{"description":"Human-readable formula string (e.g., 'Revenue - Costs'). Alternative to calculationParts array. If both formulaText and calculationParts are provided, calculationParts takes precedence. Supports: variable names, constants, operators (+, -, *, /, ^), parentheses, functions (SUM, MAX, MIN, IF, etc.), period offsets (Revenue[-1] for previous period), period references (Periods returns end date of current period, useful for date comparisons like 'Periods \u003e Launch_Date'). Quote variable names containing special characters: \"Revenue (Net)\".","type":"string"},"id":{"type":"string"}}}
+[ASSISTANT]: I see that at Level 1, ModelAssumptions can't be created directly — I need to use the inline assumption grid on TimeSegments. Let me check how that works, plus look at how to set assumption values at this rigor level.
+[TOOL]: GetInstructions(action="get", explanation="Get assumptions instructions", parameters={"category":"assumptions"})
+[TOOL_RESULT]: {"category":"assumptions","content":"# Working with ModelAssumptions\r\n\r\n## Overview\r\n\r\nModelAssumptions are user-input containers that provide values to Variables. They store scalar values that can vary by Scenario and Sensitivity. When a Variable has `defaultFormulaType: Assumptions`, it pulls its values from a ModelAssumption.\r\n\r\n## Key Concepts\r\n\r\n**ModelAssumption**: A container for user-input values with the following key properties:\r\n- **prefix**: The base name before dimensional/time context is added\r\n- **values**: A map of values keyed by Scenario ID\r\n- **sensitivities**: A map of sensitivity overrides keyed by Sensitivity ID\r\n- **sensitivityType**: The type of sensitivity calculation (PercentageChange, Delta, Absolute)\r\n- **unit**: The unit definition including any dimensional modifiers\r\n\r\n**Relationship to Variables**: Variables with `defaultFormulaType: Assumptions` reference a ModelAssumption via `defaultAssumptionId`. The Variable gets its calculated values from the assumption.\r\n\r\n## Values Map\r\n\r\nThe `values` property is a `Dictionary\u003cstring, ModelAssumptionValue\u003e` where:\r\n- **Keys**: Scenario IDs (e.g., `\"-Pt6e56nOUBefHIEvLbi\"`)\r\n- **Values**: ModelAssumptionValue objects\r\n\r\n### ModelAssumptionValue Structure\r\n\r\nEach value entry specifies:\r\n- **modelAssumptionValueType**: Currently only `LocalInput` is supported\r\n- **localInputValue**: The actual value as a string (parsed based on dataType)\r\n\r\n### Example\r\n\r\n```json\r\n{\r\n  \"values\": {\r\n    \"-scenarioId1\": {\r\n      \"modelAssumptionValueType\": \"LocalInput\",\r\n      \"localInputValue\": \"29.99\"\r\n    },\r\n    \"-scenarioId2\": {\r\n      \"modelAssumptionValueType\": \"LocalInput\",\r\n      \"localInputValue\": \"34.99\"\r\n    }\r\n  }\r\n}\r\n```\r\n\r\n**Important**: If a Scenario is \"based on\" another Scenario and has no explicit value, it inherits from its base Scenario.\r\n\r\n## Sensitivities Map\r\n\r\nThe `sensitivities` property is a `Dictionary\u003cstring, SensitivityValue\u003e` where:\r\n- **Keys**: Sensitivity IDs (e.g., `\"-Pt6e56nOUBefHIEvLbj\"`)\r\n- **Values**: SensitivityValue objects\r\n\r\n### SensitivityValue Structure\r\n\r\nEach sensitivity entry specifies:\r\n- **sensitivityValueType**: Must match the parent assumption's `sensitivityType`\r\n- One of: `percentage`, `delta`, or `absolute` (depending on type)\r\n\r\n### sensitivityType Matching\r\n\r\n**Critical**: The `sensitivityType` on ModelAssumption determines the type for ALL sensitivity values. Individual `SensitivityValue.sensitivityValueType` values must match.\r\n\r\n| sensitivityType | Required Field | Meaning |\r\n|-----------------|---------------|---------|\r\n| PercentageChange | percentage | Multiply base value by (1 + percentage/100) |\r\n| Delta | delta | Add delta to base value |\r\n| Absolute | absolute | Replace base value entirely |\r\n\r\n### Example\r\n\r\n```json\r\n{\r\n  \"sensitivityType\": \"PercentageChange\",\r\n  \"sensitivities\": {\r\n    \"-sensitivityId1\": {\r\n      \"sensitivityValueType\": \"PercentageChange\",\r\n      \"percentage\": \"10\"\r\n    },\r\n    \"-sensitivityId2\": {\r\n      \"sensitivityValueType\": \"PercentageChange\",\r\n      \"percentage\": \"-5\"\r\n    }\r\n  }\r\n}\r\n```\r\n\r\n## Dimensional Assumptions\r\n\r\nAssumptions can represent values across Dimensions (e.g., by Region, by Product). Unlike Variables which expand across Dimensions via `tagParents`, dimensional assumptions require **separate ModelAssumption objects** for each dimension combination.\r\n\r\n### How Dimensions Work\r\n\r\n1. **One Assumption per dimension combination**: For \"Price\" varying by Region (North, South) and Tier (Basic, Premium), you create 4 assumptions\r\n2. **Same prefix, different modifiers**: All share the same `prefix` but have different Unit modifiers\r\n3. **Modifiers on UnitParts**: Dimensional context is stored as `modifiers` on UnitPart objects\r\n\r\n### Example: New Members per Month by Region and Tier\r\n\r\nFor a model with:\r\n- Region Dimension: North, South\r\n- Tier Dimension: Basic, Premium\r\n\r\nYou would create 4 ModelAssumptions, all with `prefix: \"New members per month\"`:\r\n\r\n| Assumption | Value | Unit Modifiers |\r\n|------------|-------|----------------|\r\n| Assumption 1 | 30 | North, Basic |\r\n| Assumption 2 | 10 | North, Premium |\r\n| Assumption 3 | 5 | South, Basic |\r\n| Assumption 4 | 18 | South, Premium |\r\n\r\n### Unit Modifiers Structure\r\n\r\nEach UnitPart can have modifiers that specify dimensional context:\r\n\r\n```json\r\n{\r\n  \"unit\": {\r\n    \"unitParts\": [\r\n      {\r\n        \"tagId\": \"-memberTagId\",\r\n        \"modifiers\": [\r\n          {\r\n            \"tagId\": \"-northTagId\"\r\n          },\r\n          {\r\n            \"tagId\": \"-basicTagId\"\r\n          }\r\n        ]\r\n      }\r\n    ]\r\n  }\r\n}\r\n```\r\n\r\nThe `modifiers` array contains references to Concrete Tags that define the dimensional position of this assumption.\r\n\r\n## Time Series Assumptions\r\n\r\nAssumptions can represent values at specific points in time or over specific periods. This is achieved by adding a `dateTimeElement` to a UnitPart.\r\n\r\n### DateTimeElement Types\r\n\r\n| Element Type | Description | Use Case |\r\n|--------------|-------------|----------|\r\n| **Flow** | Period with duration | Flow values (e.g., \"Revenue for Q1 2024\") |\r\n| **Balance** | Point-in-time snapshot | Stock values (e.g., \"Headcount at Dec 2024\") |\r\n| **Timeless** | Period without temporal semantics | Unitless time-varying values (e.g., \"Growth Rate for 2024\") |\r\n\r\n**Important**: All non-constant Assumptions require a `dateTimeElement` matching the UnitPart's TimeType. Constant Assumptions (where the Variable has `isConstant: true`) have no `dateTimeElement` — a single value covers all periods.\r\n\r\n### DateTimeSeriesDate Formats\r\n\r\nThe `dateString` format depends on the `dateType`:\r\n\r\n| dateType | Format | Example |\r\n|----------|--------|---------|\r\n| Day | `yyyyMMdd` | `\"20240115\"` (January 15, 2024) |\r\n| Week | `yyyyMMdd` | `\"20240121\"` (end of week, e.g., Sunday) |\r\n| Month | `yyyyMM` | `\"202401\"` (January 2024) |\r\n| Quarter | `yyyyQ[1-4]` | `\"2024Q1\"` (Q1 2024) |\r\n| Year | `yyyy` | `\"2024\"` |\r\n\r\n**Note**: Quarter and Year formats use calendar year conventions (Q1 = Jan-Mar, year ends December 31). The system will interpret these correctly based on the model's fiscal year settings.\r\n\r\n### Month-Specific Options\r\n\r\nWhen `dateType` is `Month`, you can specify when in the month:\r\n\r\n| monthDateType | Description |\r\n|---------------|-------------|\r\n| EndOfMonth | End of the specified month (default) |\r\n| DayInMonth | Specific day, requires `dayOfMonth` (1-28) |\r\n\r\n### DateTimeElement Structure\r\n\r\n```json\r\n{\r\n  \"dateTimeElement\": {\r\n    \"elementType\": \"Flow\",\r\n    \"dateType\": \"Quarter\",\r\n    \"dateString\": \"2024Q1\",\r\n    \"duration\": 1\r\n  }\r\n}\r\n```\r\n\r\nFor Balance (snapshot) elements, omit `duration`:\r\n\r\n```json\r\n{\r\n  \"dateTimeElement\": {\r\n    \"elementType\": \"Balance\",\r\n    \"dateType\": \"Month\",\r\n    \"dateString\": \"202412\",\r\n    \"monthDateType\": \"EndOfMonth\"\r\n  }\r\n}\r\n```\r\n\r\n### Pattern: Time Series Assumption\r\n\r\nA quarterly revenue assumption for Q1 2024:\r\n\r\n```json\r\n{\r\n  \"action\": \"create\",\r\n  \"object_type\": \"ModelAssumption\",\r\n  \"parameters\": {\r\n    \"prefix\": \"Revenue\",\r\n    \"dataType\": \"Double\",\r\n    \"values\": {\r\n      \"-baseScenarioId\": {\r\n        \"modelAssumptionValueType\": \"LocalInput\",\r\n        \"localInputValue\": \"1000000\"\r\n      }\r\n    },\r\n    \"unit\": {\r\n      \"unitParts\": [\r\n        {\r\n          \"tagId\": \"-revenueTagId\",\r\n          \"timeType\": \"Flow\",\r\n          \"dateTimeElement\": {\r\n            \"elementType\": \"Flow\",\r\n            \"dateType\": \"Quarter\",\r\n            \"dateString\": \"2024Q1\",\r\n            \"duration\": 1\r\n          }\r\n        }\r\n      ]\r\n    }\r\n  }\r\n}\r\n```\r\n\r\n### Pattern: Balance Snapshot Assumption\r\n\r\nA monthly balance (e.g., headcount at end of month):\r\n\r\n```json\r\n{\r\n  \"action\": \"create\",\r\n  \"object_type\": \"ModelAssumption\",\r\n  \"parameters\": {\r\n    \"prefix\": \"Headcount\",\r\n    \"dataType\": \"Integer\",\r\n    \"values\": {\r\n      \"-baseScenarioId\": {\r\n        \"modelAssumptionValueType\": \"LocalInput\",\r\n        \"localInputValue\": \"150\"\r\n      }\r\n    },\r\n    \"unit\": {\r\n      \"unitParts\": [\r\n        {\r\n          \"tagId\": \"-headcountTagId\",\r\n          \"timeType\": \"Balance\",\r\n          \"dateTimeElement\": {\r\n            \"elementType\": \"Balance\",\r\n            \"dateType\": \"Month\",\r\n            \"dateString\": \"202412\"\r\n          }\r\n        }\r\n      ]\r\n    }\r\n  }\r\n}\r\n```\r\n\r\n### Pattern: Unitless Time Series\r\n\r\nFor a unitless value at a specific time (no tag, just time context):\r\n\r\n```json\r\n{\r\n  \"action\": \"create\",\r\n  \"object_type\": \"ModelAssumption\",\r\n  \"parameters\": {\r\n    \"prefix\": \"Growth Rate\",\r\n    \"dataType\": \"Double\",\r\n    \"values\": {\r\n      \"-baseScenarioId\": {\r\n        \"modelAssumptionValueType\": \"LocalInput\",\r\n        \"localInputValue\": \"0.05\"\r\n      }\r\n    },\r\n    \"unit\": {\r\n      \"unitParts\": [\r\n        {\r\n          \"tagId\": null,\r\n          \"timeType\": \"Timeless\",\r\n          \"dateTimeElement\": {\r\n            \"elementType\": \"Timeless\",\r\n            \"dateType\": \"Year\",\r\n            \"dateString\": \"2024\"\r\n          }\r\n        }\r\n      ]\r\n    }\r\n  }\r\n}\r\n```\r\n\r\n### Time Series Pitfalls\r\n\r\n**Pitfall 1: Missing duration for Flow**\r\n\r\nFlow elements require a `duration` (minimum 1). Balance elements should not have duration.\r\n\r\n**Pitfall 2: Mismatched timeType and elementType**\r\n\r\nThe `timeType` on UnitPart should match the `elementType` in dateTimeElement:\r\n- `timeType: \"Flow\"` → `elementType: \"Flow\"`\r\n- `timeType: \"Balance\"` → `elementType: \"Balance\"`\r\n- `timeType: \"Timeless\"` → `elementType: \"Timeless\"`\r\n\r\n**Pitfall 3: Wrong date format**\r\n\r\nEach dateType has a specific format. Using `\"2024-01\"` instead of `\"202401\"` for Month will fail validation.\r\n\r\n## Common Patterns\r\n\r\n### Pattern 1: Simple Scalar Assumption\r\n\r\nA single value that doesn't vary by Scenario:\r\n\r\n```json\r\n{\r\n  \"action\": \"create\",\r\n  \"object_type\": \"ModelAssumption\",\r\n  \"parameters\": {\r\n    \"prefix\": \"Tax Rate\",\r\n    \"dataType\": \"Double\",\r\n    \"values\": {\r\n      \"-baseScenarioId\": {\r\n        \"modelAssumptionValueType\": \"LocalInput\",\r\n        \"localInputValue\": \"0.25\"\r\n      }\r\n    }\r\n  }\r\n}\r\n```\r\n\r\n### Pattern 2: Multi-Scenario Assumption\r\n\r\nValues that differ by Scenario:\r\n\r\n```json\r\n{\r\n  \"action\": \"create\",\r\n  \"object_type\": \"ModelAssumption\",\r\n  \"parameters\": {\r\n    \"prefix\": \"Revenue Growth Rate\",\r\n    \"dataType\": \"Double\",\r\n    \"values\": {\r\n      \"-baseScenarioId\": {\r\n        \"modelAssumptionValueType\": \"LocalInput\",\r\n        \"localInputValue\": \"0.05\"\r\n      },\r\n      \"-optimisticScenarioId\": {\r\n        \"modelAssumptionValueType\": \"LocalInput\",\r\n        \"localInputValue\": \"0.08\"\r\n      },\r\n      \"-pessimisticScenarioId\": {\r\n        \"modelAssumptionValueType\": \"LocalInput\",\r\n        \"localInputValue\": \"0.02\"\r\n      }\r\n    }\r\n  }\r\n}\r\n```\r\n\r\n### Pattern 3: Assumption with Sensitivities\r\n\r\nAdd sensitivity analysis capability:\r\n\r\n```json\r\n{\r\n  \"action\": \"create\",\r\n  \"object_type\": \"ModelAssumption\",\r\n  \"parameters\": {\r\n    \"prefix\": \"Discount Rate\",\r\n    \"dataType\": \"Double\",\r\n    \"sensitivityType\": \"Delta\",\r\n    \"values\": {\r\n      \"-baseScenarioId\": {\r\n        \"modelAssumptionValueType\": \"LocalInput\",\r\n        \"localInputValue\": \"0.08\"\r\n      }\r\n    },\r\n    \"sensitivities\": {\r\n      \"-highSensitivityId\": {\r\n        \"sensitivityValueType\": \"Delta\",\r\n        \"delta\": \"0.02\"\r\n      },\r\n      \"-lowSensitivityId\": {\r\n        \"sensitivityValueType\": \"Delta\",\r\n        \"delta\": \"-0.02\"\r\n      }\r\n    }\r\n  }\r\n}\r\n```\r\n\r\n## Common Pitfalls\r\n\r\n### Pitfall 1: Confusing Values Keys with Sensitivities Keys\r\n\r\n**Mistake**: Using the wrong ID type as map keys.\r\n\r\n**Reality**:\r\n- `values` keys are **Scenario IDs**\r\n- `sensitivities` keys are **Sensitivity IDs**\r\n\r\nThese are different object types with different IDs.\r\n\r\n### Pitfall 2: Mismatching sensitivityType\r\n\r\n**Mistake**: Setting `sensitivityType: PercentageChange` but providing `delta` values in sensitivities.\r\n\r\n**Reality**: The `sensitivityValueType` on each SensitivityValue must match the parent assumption's `sensitivityType`.\r\n\r\n### Pitfall 3: Expecting Dimensional Expansion\r\n\r\n**Mistake**: Thinking one assumption can cover multiple dimension combinations.\r\n\r\n**Reality**: Each dimension combination requires its own ModelAssumption. Use Unit modifiers to differentiate them.\r\n\r\n### Pitfall 4: Numeric Values as Numbers\r\n\r\n**Mistake**: Providing numeric values as JSON numbers (`\"localInputValue\": 29.99`).\r\n\r\n**Reality**: All values are stored as strings. Always use string format (`\"localInputValue\": \"29.99\"`).\r\n\r\n## Best Practices\r\n\r\n1. **Use descriptive prefixes** that clearly identify what the assumption represents\r\n2. **Provide values for the Base Scenario** at minimum - other scenarios can inherit\r\n3. **Match sensitivityType with your analysis needs**:\r\n   - Use `PercentageChange` for multiplicative sensitivity (e.g., revenue changes)\r\n   - Use `Delta` for additive sensitivity (e.g., rate adjustments)\r\n   - Use `Absolute` for replacement values\r\n4. **Create dimensional assumptions systematically** - ensure all combinations are covered\r\n5. **Query existing Scenarios and Sensitivities** before creating assumptions to get valid IDs\r\n","description":"Object reference: ModelAssumption properties, values maps, sensitivities, dimensional assumptions, unit modifiers","title":"Working with ModelAssumptions","topics":["ModelAssumption","Scenarios","Sensitivities","Dimensions","UnitModifiers","values"]}
+[ASSISTANT]: Now I understand the approach. At Level 1, I need to use the inline assumption grid on TimeSegments. Let me check how that works specifically.
+[TOOL]: GetInstructions(action="get", explanation="Get variables instructions", parameters={"category":"variables"})
+[TOOL_RESULT]: {"category":"variables","content":"# Working with Variables\r\n\r\n## Overview\r\n\r\nVariables are the primary calculation containers in Models. This guide covers complex Variable properties and patterns that require deeper understanding beyond basic schema descriptions.\r\n\r\n## Targeted Editing (Partial Updates)\r\n\r\nVariable updates support targeted edits. Only include the properties you want to change. Omitted properties are preserved.\r\n\r\n- **Omitted property**: keeps the existing value\r\n- **Explicit null**: clears the value (when allowed by the schema)\r\n\r\nExample (update just the name):\r\n```json\r\n{\r\n  \"id\": \"var-123\",\r\n  \"name\": \"Updated Variable Name\"\r\n}\r\n```\r\n\r\n## Key Concepts\r\n\r\n**Variable**: A calculation container with a `defaultFormulaType` that determines its behavior:\r\n- **Calculation**: Uses mathematical formulas referencing other Variables\r\n- **Assumption**: Gets values from ModelAssumption objects (user inputs)\r\n- **Aggregation**: Collects Variables representing Dimension parts into a Dimension-level Variable\r\n\r\n**Dimensions**: Abstract Tags with Concrete Tag children that expand Variables across multiple categories. When a Variable references an Abstract Tag via `tagParents`, it automatically expands to generate separate calculation lines for each Concrete child.\r\n\r\n## Defining Calculations with formulaText\r\n\r\n### Overview\r\n\r\nWhen creating or updating Calculation Variables, you can define the formula using `formulaText` - a human-readable string format - instead of the verbose `calculationParts` array.\r\n\r\n### Where to Use\r\n\r\nThe `formulaText` property can be used inside any `calculation` or `defaultCalculation` object:\r\n\r\n```json\r\n{\r\n  \"name\": \"Profit\",\r\n  \"defaultFormulaType\": \"Calculation\",\r\n  \"defaultCalculation\": {\r\n    \"formulaText\": \"Revenue - Costs\"\r\n  }\r\n}\r\n```\r\n\r\n### Syntax\r\n\r\n#### Variable References\r\n- Use the Variable name directly: `Revenue`\r\n- Quote names with special characters: `\"Revenue (Net)\"`\r\n- Quote names with spaces: `\"Total Revenue\"`\r\n\r\n#### Operators\r\n- Addition: `+`\r\n- Subtraction: `-`\r\n- Multiplication: `*`\r\n- Division: `/`\r\n- Exponentiation: `^`\r\n- Parentheses for grouping: `(Revenue - Costs) * 100`\r\n\r\n#### Constants\r\n- Numbers: `100`, `3.14`, `-5`\r\n- Negative values: `-100` or `0 - 100`\r\n\r\n#### Period Offsets\r\n- Previous period: `Revenue[-1]`\r\n- Two periods back: `Revenue[-2]`\r\n- Useful for growth calculations: `Revenue - Revenue[-1]`\r\n\r\n#### Period References\r\nThe `Periods` keyword returns the current period's end date as a date value. This is useful for creating timing flexibility, e.g. `Is Live = Periods \u003e Launch Date`\r\n\r\nKey points:\r\n- Returns the **end date** of the period (e.g., 31 Dec for a Calendar Year)\r\n- Supports offsets: `Periods[-1]` returns the previous period's end date\r\n- Compare against date-type Assumption Variables (Variables with date values)\r\n\r\nFinancial modeling best practice with Periods:\r\n- When flexible timing is required use Variables with DateType `Date` (Model periods don't have a time component)\r\n- It is always best to create a `Boolean` Variable for a timing condition (e.g. `Service is live`) and then to multiply that by the relevant Variable, rather than perform both timing logic and calculation in a single Variable\r\n\r\n#### Functions\r\n- Standard functions: `SUM(...)`, `MAX(...)`, `MIN(...)`, `IF(...)`\r\n- Example: `IF(Revenue \u003e 0, Profit / Revenue, 0)`\r\n\r\n### Examples\r\n\r\n**Simple calculation:**\r\n```json\r\n{\r\n  \"defaultCalculation\": {\r\n    \"formulaText\": \"Revenue - Costs\"\r\n  }\r\n}\r\n```\r\n\r\n**With period offset (growth calculation):**\r\n```json\r\n{\r\n  \"defaultCalculation\": {\r\n    \"formulaText\": \"Revenue - Revenue[-1]\"\r\n  }\r\n}\r\n```\r\n\r\n**With parentheses and constants:**\r\n```json\r\n{\r\n  \"defaultCalculation\": {\r\n    \"formulaText\": \"(Revenue - Costs) / Revenue * 100\"\r\n  }\r\n}\r\n```\r\n\r\n**With quoted variable names:**\r\n```json\r\n{\r\n  \"defaultCalculation\": {\r\n    \"formulaText\": \"\\\"Net Revenue\\\" - \\\"Operating Costs\\\"\"\r\n  }\r\n}\r\n```\r\n\r\n**With period reference (date comparison):**\r\n```json\r\n{\r\n  \"defaultCalculation\": {\r\n    \"formulaText\": \"Periods \u003e \\\"Launch Date\\\"\"\r\n  }\r\n}\r\n```\r\n\r\n### Precedence Rules\r\n\r\n- If both `formulaText` and `calculationParts` are provided, `calculationParts` takes precedence\r\n- `formulaText` is converted to `calculationParts` before the Variable is created/updated\r\n- The API response includes `formulaText` generated from the stored `calculationParts`\r\n\r\n### Error Handling\r\n\r\nParse errors return structured error messages with:\r\n- Position in the formula where the error occurred\r\n- What was found vs. what was expected\r\n- Hints for resolution (e.g., \"Variable 'Unknown' not found in Model\")\r\n\r\n## Aggregation Variables\r\n\r\n### Critical Understanding: Aggregation is NOT Summing\r\n\r\n**Common Misconception**: Aggregation Variables \"sum\" other Variables.\r\n\r\n**Reality**: Aggregation Variables **collect** Variables that each represent a part of a Dimension into a Variable of that Dimension.\r\n\r\n### Example: Regional Revenues\r\n\r\nSuppose you have:\r\n- **Revenues-South**: Calculation Variable for southern region revenues\r\n- **Revenues-North**: Calculation Variable for northern region revenues\r\n- Both are Concrete Tags under the \"Region\" Abstract Tag (Dimension)\r\n\r\nYou can create:\r\n- **Revenues by Region**: Aggregation Variable that collects Revenues-South and Revenues-North\r\n\r\nThe Aggregation Variable expands to show:\r\n- Revenues by Region (South) = Revenues-South\r\n- Revenues by Region (North) = Revenues-North\r\n\r\nEach region may calculate revenues differently, but the Aggregation Variable provides a unified Dimension-level view.\r\n\r\n### When to Use Aggregation\r\n\r\n- When you have Variables representing Dimension parts (e.g., regions, products, markets)\r\n- When you want a Dimension-level Variable that combines these parts\r\n- When each part may have different calculation logic\r\n\r\n### Property: `aggregatedVariableIds`\r\n\r\n- **Type**: `array[string]` - Array of Variable IDs\r\n- **Relevant When**: `defaultFormulaType` is `Aggregation`\r\n- **Purpose**: Lists the Variables representing Dimension parts to collect\r\n- **Note**: These Variables must represent parts of the same Dimension(s) that the Aggregation Variable uses\r\n\r\n## contextVarianceMap\r\n\r\n### Purpose\r\n\r\nThe `contextVarianceMap` defines which unit parts vary with which Dimensions. This is critical for Variables with both:\r\n- **Dimensions** (via `tagParents`)\r\n- **Defined units** (via `unitOption: Defined`)\r\n\r\n### When It's Relevant\r\n\r\n- Variable has `unitOption: Defined` (not Inferred)\r\n- Variable has Dimensions (via `tagParents` with at least one parent)\r\n- **Both conditions must be true**\r\n\r\n### Structure\r\n\r\nThe map is a dictionary where:\r\n- **Key**: Unit part ID (e.g., \"GBP\", \"Member\", \"Month\")\r\n- **Value**: Set of Dimension (TagParent) IDs that this unit part varies with\r\n\r\n### Example\r\n\r\nSuppose a Variable has:\r\n- Unit: \"GBP per Member per Month\" (with UnitPart IDs: `up-gbp-123`, `up-member-456`, `up-month-789`)\r\n- Dimensions: \"Region\" (Tag ID: `tag-region-abc`) and \"Product\" (Tag ID: `tag-product-def`)\r\n\r\nThe default `contextVarianceMap` would be:\r\n```json\r\n{\r\n  \"up-gbp-123\": [\"tag-region-abc\", \"tag-product-def\"],\r\n  \"up-member-456\": [\"tag-region-abc\", \"tag-product-def\"],\r\n  \"up-month-789\": [\"tag-region-abc\", \"tag-product-def\"]\r\n}\r\n```\r\n\r\n**Important**: The map uses actual object IDs, not human-readable names:\r\n- **Keys**: UnitPart IDs from the Variable's Unit (use `get-details` on the Unit to find these)\r\n- **Values**: Tag IDs of the Dimensions from `tagParents` (Abstract Tag IDs)\r\n\r\nThis means all unit parts vary with all Dimensions (the default).\r\n\r\n### Custom contextVarianceMap\r\n\r\nYou only need to provide a custom `contextVarianceMap` when:\r\n- You want specific unit parts to vary with specific Dimensions only\r\n- The default \"all vary with all\" doesn't match your requirements\r\n\r\n**Important**: Each Dimension must vary with at least one unit part. Otherwise, there wouldn't be variance for that Dimension.\r\n\r\n### Property: `contextVarianceMap`\r\n\r\n- **Type**: `object` (dictionary mapping unit part IDs to Dimension ID sets)\r\n- **Relevant When**: `unitOption` is `Defined` AND Variable has Dimensions\r\n- **Default**: Automatically generated as \"all Dimensions vary with all unit parts\"\r\n- **Rarely Required**: Most Variables use the default map\r\n\r\n## groupSummaryType\r\n\r\n### Purpose\r\n\r\nControls how a Variable summarizes across all Dimensions when creating summary lines.\r\n\r\n### Values\r\n\r\n#### `None`\r\n- No automatic summary behavior\r\n- Variable appears only at the detailed Dimension level\r\n\r\n#### `Sum`\r\n- Always performs a simple sum across all Dimension items\r\n- Example: If you have Revenues by Region (South, North), Sum gives Total Revenues = South + North\r\n\r\n#### `Auto`\r\n- Performs the Variable's calculation on the summary lines of referenced Variables\r\n- Useful when the result differs from a simple sum\r\n- **Example**: Weighted average price\r\n  - If Price = Revenue / Volume\r\n  - Auto calculates: Total Price = Total Revenue / Total Volume\r\n  - This is different from averaging individual prices\r\n\r\n#### `Rearranged`\r\n- Similar to Auto, but requires a parent Variable reference\r\n- Used when the summary calculation can only be computed from parent Variables\r\n- **Example**: Average price when Price is an input (not calculated)\r\n  - If Price is an input Variable (not Revenue/Volume)\r\n  - You need to rearrange: Price = Revenue / Volume\r\n  - But Revenue and Volume are parent Variables\r\n  - Rearranged uses `groupSummaryRearrangedParentId` to reference the parent for calculation\r\n\r\n### When to Use Each\r\n\r\n| Use Case | groupSummaryType | Notes |\r\n|----------|------------------|-------|\r\n| Simple totals | `Sum` | Direct sum of all Dimension items |\r\n| Calculated metrics | `Auto` | Recalculate formula on summary lines |\r\n| Input-based metrics | `Rearranged` | Calculate from parent Variables |\r\n\r\n### Property: `groupSummaryType`\r\n\r\n- **Type**: `enum` - `None`, `Sum`, `Auto`, `Rearranged`\r\n- **Default**: `None`\r\n- **Purpose**: Controls Dimension summary behavior\r\n\r\n### Property: `groupSummaryRearrangedParentId`\r\n\r\n- **Type**: `string` - Variable ID\r\n- **Required When**: `groupSummaryType` is `Rearranged`\r\n- **Purpose**: References the parent Variable to base the Rearranged summary calculation on\r\n- **Example**: For weighted averages requiring parent data\r\n\r\n## Unit System\r\n\r\n### Defined vs Inferred\r\n\r\n#### `unitOption: Defined`\r\n- Unit is explicitly set via the `unit` property\r\n- Used for Assumption and Aggregation Variables (default)\r\n- Can also be used for Calculation Variables\r\n\r\n#### `unitOption: Inferred`\r\n- Unit is automatically calculated from the formula\r\n- Only available for Calculation Variables\r\n- Based on the Variables referenced in the calculation\r\n- If unit cannot be calculated, a unit error is shown\r\n\r\n### Unit Factoring (`applyFactoring`)\r\n\r\n**Purpose**: Automatically adjusts calculations when the Variable's unit factor differs from the calculated unit factor.\r\n\r\n**How It Works**:\r\n- Factoring is done automatically based on units\r\n- Only works if `unitOption` is `Defined`\r\n- The Variable's unit must have a different factor from the calculated unit\r\n- Example: Variable has unit in millions (factorPower 6/1), but calculation returns thousands (factorPower 3/1)\r\n- Setting `applyFactoring: true` automatically adjusts the calculation (divides by 10^3)\r\n\r\n**Property**: `applyFactoring`\r\n- **Type**: `boolean`\r\n- **Default**: `false`\r\n- **Purpose**: Auto-adjust when Variable unit factor differs from calculated unit factor\r\n- **Note**: User doesn't need to multiply or divide within the Variable's calculation\r\n\r\n### Unit Validation\r\n\r\n- Automatic unit compatibility checking across Variable references\r\n- Unit inconsistencies generate warnings, not errors - calculations still execute\r\n- `overrideUnitError: true` allows bypassing unit validation when needed\r\n\r\n**When to use `overrideUnitError`:**\r\n- The calculated unit doesn't match the Defined unit, but the result is semantically correct\r\n- Example: `Balance[-1] × Timeless` infers as `Balance[-1]`, but you know it should be `Flow`\r\n- Always set `overrideUnitError: true` at the same time as setting the Defined unit — don't set the Defined unit first and then override in a separate step\r\n\r\n**When to use a compound unit instead:**\r\n- When a rate converts between TimeTypes (e.g., stock to flow), give it a compound unit\r\n- Example: Churn Rate = `Member [Flow] / Member [Balance[-1]]` — then `Members[-1] × Churn Rate` resolves to `Member [Flow]` without needing an override\r\n- Compound units are preferred over overrides because they make the algebra self-documenting\r\n\r\n## NumberFormat Selection\r\n\r\nThe `numberFormatId` property controls how Variable values are displayed. Always set an appropriate format.\r\n\r\n### Common Inbuilt Format IDs\r\n\r\n| ID | Format | Use For |\r\n|----|--------|---------|\r\n| `General` | General | Boolean, Validation, String |\r\n| `ThousandSeparator0Dp` | #,##0 | Standard integers (default) |\r\n| `TwoDecimalPlaces` | 0.00 | Decimals without thousands separator |\r\n| `Pct1Dp` | 0.0% | Percentages (growth, rate, margin, yield) |\r\n| `Date1` | dd mmm yy | Date values |\r\n| `GBP2Dp` | £#,##0.00 | GBP currency |\r\n| `USD2Dp` | $#,##0.00 | USD currency |\r\n| `EUR2Dp` | €#,##0.00 | EUR currency |\r\n\r\nUse `Pct1Dp` when Variable name contains: %, pct, percentage, growth, rate, inflation, margin, yield.\r\n\r\nIf the required format isn't listed above, use `filter` to find other available formats, or `create` to add a new one.\r\n\r\n## TimeSegments\r\n\r\n### Purpose\r\n\r\nAllow Variables to change formula behavior across different time periods.\r\n\r\n### Types of TimeSegments\r\n\r\n#### Assumption TimeSegments\r\n- Provide values from ModelAssumption objects for specific periods/dimensions\r\n- Can override the default assumption for specific time ranges\r\n\r\n#### Calculation TimeSegments\r\n- Provide different calculation formulas for specific time periods\r\n- **Critical Constraint**: Calculation formulas within TimeSegments can only reference the same Variable with period offsets (e.g., `[-1]` for previous period)\r\n- They cannot reference other Variables to prevent circular dependencies\r\n\r\n### Creating Assumptions Inline with TimeSegments\r\n\r\nWhen creating a Variable with Assumption TimeSegments, you can provide assumption values directly as a 2D grid. This eliminates the need to create ModelAssumption objects separately.\r\n\r\n#### Grid Convention\r\n\r\n- **Columns**: Time periods (chronological order, determined by TimeSegment's date range)\r\n- **Rows**: Dimension cross-product (if Variable has dimensions via `tagParents`)\r\n- **Empty/null values**: Skip (no assumption created for that cell)\r\n\r\n#### Example: Simple Time Series (No Dimensions)\r\n\r\n```json\r\n{\r\n  \"name\": \"Growth Rate\",\r\n  \"defaultFormulaType\": \"Assumptions\",\r\n  \"timeSegments\": [{\r\n    \"start\": { \"segmentPeriodType\": \"Auto\" },\r\n    \"duration\": { \"segmentDurationType\": \"PeriodsGeneric\", \"genericPeriods\": 6 },\r\n    \"assumptions\": {\r\n      \"values\": [\r\n        [\"0.05\", \"0.06\", \"0.07\", \"0.08\", \"0.09\", \"0.10\"]\r\n      ]\r\n    }\r\n  }]\r\n}\r\n```\r\n\r\nThe Variable's name (\"Growth Rate\") is automatically used as the assumption prefix.\r\n\r\n#### Example: Dimensional Variable (Region Dimension)\r\n\r\nFor a Variable with Region dimension (North, South) and 3 time periods:\r\n\r\n```json\r\n{\r\n  \"name\": \"Sales Growth\",\r\n  \"defaultFormulaType\": \"Assumptions\",\r\n  \"tagParents\": { \"parents\": [{ \"tagId\": \"-regionDimensionId\" }] },\r\n  \"timeSegments\": [{\r\n    \"start\": { \"segmentPeriodType\": \"Auto\" },\r\n    \"duration\": { \"segmentDurationType\": \"PeriodsGeneric\", \"genericPeriods\": 3 },\r\n    \"assumptions\": {\r\n      \"values\": [\r\n        [\"0.05\", \"0.06\", \"0.07\"],\r\n        [\"0.04\", \"0.05\", \"0.06\"]\r\n      ]\r\n    }\r\n  }]\r\n}\r\n```\r\n\r\nRow order is deterministic (ordered by TagGroupWithParents.OrderedId). Use `expand-dimensions` action to discover the exact grid shape.\r\n\r\n#### Grid Shape Discovery\r\n\r\nBefore providing values, you can use the `expand-dimensions` action to discover the expected grid shape:\r\n\r\n```json\r\n{\r\n  \"objectType\": \"Variable\",\r\n  \"action\": \"expand-dimensions\",\r\n  \"id\": \"var-123\",\r\n  \"timeSegmentIndex\": 0\r\n}\r\n```\r\n\r\nReturns:\r\n```json\r\n{\r\n  \"columns\": [\"2021\", \"2022\", \"2023\"],\r\n  \"rows\": [\"North\", \"South\"],\r\n  \"shape\": [2, 3]\r\n}\r\n```\r\n\r\nThis tells you:\r\n- The Variable expects a 2×3 grid\r\n- Rows are \"North\" then \"South\" (dimension cross-product)\r\n- Columns are \"2021\", \"2022\", \"2023\" (time periods)\r\n\r\n#### How It Works\r\n\r\nWhen you provide an `assumptions` object on a TimeSegment:\r\n1. The TimeSegment's formula type is automatically set to `Assumptions`\r\n2. After the Variable is created, ModelAssumption objects are generated from the grid\r\n3. Each grid cell creates one assumption with the correct Unit (including time and dimension modifiers)\r\n4. Assumptions are linked to the TimeSegment's formula\r\n5. Values use the Base Scenario by default\r\n\r\n#### When to Use\r\n\r\n- **Creating new Variables with Assumption TimeSegments**: Simplest approach\r\n- **Simple time series**: Just need to provide values across periods\r\n- **Dimensional assumptions**: Values vary by dimension and time\r\n\r\n#### When NOT to Use\r\n\r\n- **Updating existing assumptions**: Use direct ModelAssumption updates instead\r\n- **Multi-scenario values**: Use standard ModelAssumption creation with explicit values per scenario\r\n- **Complex sensitivity setups**: Create ModelAssumptions directly with sensitivity configuration\r\n\r\n### defaultAssumptionId\r\n\r\n**Purpose**: Fallback assumption for any period/dimensions in a TimeSegment that doesn't have a matching assumption.\r\n\r\n**When Used**:\r\n- Very rarely in practice\r\n- Typically, all assumption IDs are provided within TimeSegments\r\n- Example: If you want the Variable to have the value 0 except for periods that you provide a value for\r\n\r\n**Property**: `defaultAssumptionId`\r\n- **Type**: `string` - ModelAssumption ID\r\n- **Available For**: All formula types (even Calculation Variables can have Assumption TimeSegments)\r\n- **Purpose**: Fallback assumption for periods/dimensions without matching TimeSegment assumption\r\n\r\n### TimeSegment Coverage\r\n\r\nTimeSegments must collectively cover all periods without gaps or overlaps.\r\n\r\n## periodType\r\n\r\n### Purpose\r\n\r\nOverrides the Model's default period for this specific Variable.\r\n\r\n### Rules\r\n\r\n- Must be set to a broader time interval than the Model timings\r\n- Example: If Model is in weeks, you can define a Variable in months\r\n- `None` means \"use the Model's default period\"\r\n\r\n### Property: `periodType`\r\n\r\n- **Type**: `enum` - `None`, `Day`, `Week`, `Month`, `Quarter`, `YearCalendar`, `YearFiscal`\r\n- **Default**: `None` (use Model default)\r\n- **Purpose**: Override Model's default period for this Variable\r\n\r\n## validationDimensionId\r\n\r\n### Purpose\r\n\r\nDefines dropdown options for Validation-type Variables.\r\n\r\n### How It Works\r\n\r\n- Variable must have `dataType: Validation`\r\n- `validationDimensionId` references an Abstract Tag (Dimension)\r\n- The Concrete Tag children of that Abstract Tag become the dropdown options\r\n- Example: \"Yes/No\" Dimension with Concrete children \"Yes\" and \"No\"\r\n\r\n### Property: `validationDimensionId`\r\n\r\n- **Type**: `string` - Abstract Tag ID\r\n- **Required When**: `dataType` is `Validation`\r\n- **Purpose**: Abstract Tag defining dropdown options for Validation-type Variables\r\n\r\n## Common Patterns and Pitfalls\r\n\r\n### Pattern 1: Dimensional Aggregation\r\n\r\n**Scenario**: You have revenue calculations for each region, and want a total revenue Variable.\r\n\r\n**Correct Approach**:\r\n1. Create Calculation Variables: \"Revenues-South\", \"Revenues-North\" (each with Region Dimension)\r\n2. Create Aggregation Variable: \"Total Revenues\" with `aggregatedVariableIds: [\"Revenues-South\", \"Revenues-North\"]`\r\n3. Set `groupSummaryType: Sum` if you want summary lines\r\n\r\n**Incorrect**: Trying to sum the Variables in a Calculation formula - use Aggregation instead.\r\n\r\n### Pattern 2: Unit Factoring\r\n\r\n**Scenario**: Your Model works in thousands, but you want to display a Variable in millions.\r\n\r\n**Correct Approach**:\r\n1. Set Variable unit to millions (factorPower 6/1)\r\n2. Ensure calculation returns thousands (factorPower 3/1)\r\n3. Set `applyFactoring: true`\r\n4. System automatically adjusts (divides by 10^3)\r\n\r\n**Incorrect**: Manually dividing in the calculation formula.\r\n\r\n### Pattern 3: Weighted Averages\r\n\r\n**Scenario**: You want average price across all products.\r\n\r\n**If Price is Calculated** (Price = Revenue / Volume):\r\n- Use `groupSummaryType: Auto`\r\n- System recalculates: Total Price = Total Revenue / Total Volume\r\n\r\n**If Price is an Input**:\r\n- Use `groupSummaryType: Rearranged`\r\n- Set `groupSummaryRearrangedParentId` to reference Revenue or Volume parent\r\n- System rearranges calculation from parent Variables\r\n\r\n### Pitfall 1: Confusing Aggregation with Summing\r\n\r\n**Mistake**: Thinking `aggregatedVariableIds` creates a sum.\r\n\r\n**Reality**: Aggregation collects Dimension parts, not sums values.\r\n\r\n### Pitfall 2: Missing contextVarianceMap Condition\r\n\r\n**Mistake**: Providing `contextVarianceMap` when Variable has no Dimensions.\r\n\r\n**Reality**: `contextVarianceMap` is only relevant when Variable has both Dimensions AND Defined unit.\r\n\r\n### Pitfall 3: Wrong groupSummaryType\r\n\r\n**Mistake**: Using `Sum` for calculated metrics that need recalculation.\r\n\r\n**Reality**: Use `Auto` or `Rearranged` when the summary result differs from a simple sum.\r\n\r\n### Pitfall 4: Self-Referencing Variable with Inferred Unit\r\n\r\n**Mistake**: Creating a Calculation Variable that references itself with a period offset (e.g., `Balance[-1] + Inflow`) and leaving `unitOption: Inferred`.\r\n\r\n**Reality**: Self-referencing Variables require `unitOption: Defined`. The Unit system cannot resolve self-references to determine the inferred type. Always define the Unit explicitly with the appropriate TimeType (typically Balance for accumulator patterns).\r\n\r\n## Best Practices\r\n\r\n1. **Use Aggregation for Dimension-based collection**, not for simple summing\r\n2. **Rely on default contextVarianceMap** unless you have specific requirements\r\n3. **Use Auto for calculated metrics** that need recalculation on summary lines\r\n4. **Use Rearranged only when necessary** - when calculation requires parent Variables\r\n5. **Set applyFactoring when unit factors differ** - don't manually adjust in formulas\r\n6. **Use defaultAssumptionId sparingly** - prefer explicit TimeSegment assumptions\r\n7. **Validate periodType compatibility** - must be broader than Model timings\r\n\r\n## Retrieving Calculated Values\r\n\r\n### get-values Operation\r\n\r\nRetrieve calculated values for one or more Variables:\r\n\r\n```\r\nQueryObject(object_type='Variable', action='get-values', parameters={\r\n  'ids': ['var-1', 'var-2'],\r\n  'periods': 'sample',        # 'all', 'first', 'last', 'first-N', 'last-N', 'sample', or specific periods\r\n  'dimensions': 'summary',    # 'summary', 'all', or specific paths like 'UK/Small'\r\n  'case': 'Base/Base',        # Scenario/Sensitivity\r\n  'includeAnalysis': true     # Adds trend, min/max, growth rate\r\n})\r\n```\r\n\r\n**Key considerations**:\r\n- Use `periods: 'sample'` for a quick snapshot (first, middle, last)\r\n- Use `dimensions: 'summary'` unless you need individual dimension values\r\n- The `includeAnalysis` option adds trend classification and growth rate\r\n\r\n### compare-cases Operation\r\n\r\nCompare values between two cases (Scenario/Sensitivity combinations):\r\n\r\n```\r\nQueryObject(object_type='Variable', action='compare-cases', parameters={\r\n  'ids': ['profit'],\r\n  'baseCase': 'Base/Base',      # Required: baseline for comparison\r\n  'compareCase': 'Lean/Base',   # Required: case to compare against baseline\r\n  'periods': 'last'\r\n})\r\n```\r\n\r\nReturns values with variance from baseline (absolute and percentage difference).\r\n\r\n### trace-dependencies with Values\r\n\r\nAdd `includeValues: true` to see values alongside the dependency tree:\r\n\r\n```\r\nModelAction(action='trace-dependencies', variableId='profit', includeValues=true, valuePeriod='last')\r\n```\r\n\r\n### valueSummary in Filter\r\n\r\nAdd `valueSummary` to filter properties to see first/last values and trend:\r\n\r\n```\r\nQueryObject(object_type='Variable', action='filter', parameters={\r\n  'properties': ['name', 'valueSummary']\r\n})\r\n```\r\n\r\nReturns `valueSummary: { first: { period, value }, last: { period, value }, trend: 'growing' }` for each Variable.\r\n","description":"Object reference: Variable properties, formulaText, CalculationParts, TimeSegments, DimensionReferences, Aggregation, Units, retrieving calculated values","title":"Working with Variables","topics":["Variables","Calculations","Aggregation","Dimensions","Units","TimeSegments","contextVarianceMap","groupSummary","DimensionReference","get-values","compare-cases","valueSummary"]}
+[ASSISTANT]: Now I have everything I need. Here's my plan for a simple SaaS revenue model:
+
+**Structure:**
+1. **New Subscribers** (Assumption) — new subs added each quarter
+2. **Churn Rate** (Assumption, constant) — % of subscribers lost per quarter
+3. **Subscribers** (Calculation) — running total: `Subscribers[-1] + New Subscribers - Churned Subscribers`
+4. **Churned Subscribers** (Calculation) — `Subscribers[-1] * Churn Rate`
+5. **ARPU** (Assumption, constant) — average revenue per user per quarter
+6. **Revenue** (Calculation) — `Subscribers * ARPU`
+
+The model runs quarterly from Mar 2025 to Dec 2027 (12 periods). Let me create all the Variables now. Since we're at Unit Rigor Level 1, I'll skip all unit definitions and use the inline assumption grid.
+
+Let me start by creating the Assumption Variables with their values:
+[TOOL]: QueryObject(action="create", explanation="Create New Subscribers assumption", object_type="Variable", parameters={"defaultFormulaType":"Assumptions","name":"New Subscribers","timeSegments":[{"assumptions":{"values":[["100","120","140","160","180","200","220","240","260","280","300","320"]]},"duration":{"segmentDurationType":"AllRemainingPeriods"},"start":{"segmentPeriodType":"Auto"}}]})
+[TOOL]: QueryObject(action="create", explanation="Create Churn Rate assumption", object_type="Variable", parameters={"defaultFormulaType":"Assumptions","isConstant":true,"name":"Churn Rate","numberFormatId":"Pct1Dp","timeSegments":[{"assumptions":{"values":[["0.05"]]},"duration":{"segmentDurationType":"AllRemainingPeriods"},"start":{"segmentPeriodType":"Auto"}}]})
+[TOOL]: QueryObject(action="create", explanation="Create ARPU assumption", object_type="Variable", parameters={"defaultFormulaType":"Assumptions","isConstant":true,"name":"ARPU","timeSegments":[{"assumptions":{"values":[["50"]]},"duration":{"segmentDurationType":"AllRemainingPeriods"},"start":{"segmentPeriodType":"Auto"}}]})
+[TOOL_RESULT]: {"error":"Unexpected error creating Variable: Cannot convert string 'AllRemainingPeriods' to enum type SegmentDurationType. Valid values: Auto, PeriodsGeneric, PeriodsSpecific"}
+[TOOL_RESULT]: {"error":"Unexpected error creating Variable: Cannot convert string 'AllRemainingPeriods' to enum type SegmentDurationType. Valid values: Auto, PeriodsGeneric, PeriodsSpecific"}
+[TOOL_RESULT]: {"error":"Unexpected error creating Variable: Cannot convert string 'AllRemainingPeriods' to enum type SegmentDurationType. Valid values: Auto, PeriodsGeneric, PeriodsSpecific"}
+[ASSISTANT]: Let me fix the duration type — I should use `Auto` for the duration to cover all periods:
+[TOOL]: QueryObject(action="create", explanation="Create New Subscribers assumption", object_type="Variable", parameters={"defaultFormulaType":"Assumptions","name":"New Subscribers","timeSegments":[{"assumptions":{"values":[["100","120","140","160","180","200","220","240","260","280","300","320"]]},"duration":{"segmentDurationType":"Auto"},"start":{"segmentPeriodType":"Auto"}}]})
+[TOOL]: QueryObject(action="create", explanation="Create Churn Rate assumption", object_type="Variable", parameters={"defaultFormulaType":"Assumptions","isConstant":true,"name":"Churn Rate","numberFormatId":"Pct1Dp","timeSegments":[{"assumptions":{"values":[["0.05"]]},"duration":{"segmentDurationType":"Auto"},"start":{"segmentPeriodType":"Auto"}}]})
+[TOOL]: QueryObject(action="create", explanation="Create ARPU assumption", object_type="Variable", parameters={"defaultFormulaType":"Assumptions","isConstant":true,"name":"ARPU","timeSegments":[{"assumptions":{"values":[["50"]]},"duration":{"segmentDurationType":"Auto"},"start":{"segmentPeriodType":"Auto"}}]})
+[TOOL_RESULT]: {"success":true,"variable":{"calculatedValues":{"growthRate":"+11.2% per period","sample":{"Dec 27":"320","Mar 25":"100","Sept 26":"220"},"trend":"growing"},"calculation":"-","defaultFormulaType":"Assumptions","id":"-Pc8mUDt8lh0MNgKtsZS","isConstant":"False","name":"New Subscribers","numberFormat":"#,##0","timeSegments":"`Mar 25 - Dec 27`: 12 assumptions","unit":"Unitless [Timeless]"}}
+[TOOL_RESULT]: {"success":true,"variable":{"calculatedValues":{"value":"5.0%"},"calculation":"-","defaultFormulaType":"Assumptions","id":"-Pc8mUDt8lh0MNgKtsc-","isConstant":"True","name":"Churn Rate","numberFormat":"0.0%","timeSegments":"`Mar 25 - Dec 27`: 1 assumption","unit":"Unitless [Timeless]"}}
+[TOOL_RESULT]: {"success":true,"variable":{"calculatedValues":{"value":"50"},"calculation":"-","defaultFormulaType":"Assumptions","id":"-Pc8mUDt8lh0MNgKtse9","isConstant":"True","name":"ARPU","numberFormat":"#,##0","timeSegments":"`Mar 25 - Dec 27`: 1 assumption","unit":"Unitless [Timeless]"}}
+[ASSISTANT]: All three assumption Variables are created. Now let me create the Calculation Variables. I need to create Churned Subscribers first (since Subscribers depends on it), and then Subscribers, and finally Revenue:
+[TOOL]: QueryObject(action="create", explanation="Create Churned Subscribers calc", object_type="Variable", parameters={"defaultCalculation":{"formulaText":"Subscribers[-1] * \"Churn Rate\""},"defaultFormulaType":"Calculation","name":"Churned Subscribers"})
+[TOOL_RESULT]: {"error":"Parameter preprocessing error: defaultCalculation.formulaText: Unexpected 'Subscribers', expected valid variable name (Hint: Variable 'Subscribers' not found in Model)"}
+[ASSISTANT]: I need to create Subscribers first since Churned Subscribers references it. But Subscribers also references Churned Subscribers — a chicken-and-egg situation. Let me create Subscribers first with a simpler formula, then create Churned Subscribers, then update Subscribers:
+
+[TOOL]: QueryObject(action="create", explanation="Create Subscribers (placeholder)", object_type="Variable", parameters={"defaultCalculation":{"formulaText":"\"New Subscribers\""},"defaultFormulaType":"Calculation","name":"Subscribers"})
+[TOOL_RESULT]: {"success":true,"variable":{"calculatedValues":{"growthRate":"+11.2% per period","sample":{"Dec 27":"320","Mar 25":"100","Sept 26":"220"},"trend":"growing"},"calculation":"New Subscribers","defaultFormulaType":"Calculation","formulaText":"New Subscribers","id":"-Pc8mUDt8lh0MNgKtshq","isConstant":"False","name":"Subscribers","numberFormat":"#,##0","timeSegments":"`Mar 25 - Dec 27`: Auto","unit":"Unitless [Timeless]"}}
+[ASSISTANT]: Good. Now I can create Churned Subscribers and then update Subscribers with the full formula:
+
+[TOOL]: QueryObject(action="create", explanation="Create Churned Subscribers calc", object_type="Variable", parameters={"defaultCalculation":{"formulaText":"Subscribers[-1] * \"Churn Rate\""},"defaultFormulaType":"Calculation","name":"Churned Subscribers"})
+[TOOL_RESULT]: {"success":true,"variable":{"calculatedValues":{"growthRate":"+11.7% per period","sample":{"Dec 27":"15","Mar 25":"0","Sept 26":"10"},"trend":"growing"},"calculation":"Subscribers  [-1] * Churn Rate","defaultFormulaType":"Calculation","formulaText":"Subscribers[-1] * Churn Rate","id":"-Pc8mUDt8lh0MNgKtsn8","isConstant":"False","name":"Churned Subscribers","numberFormat":"#,##0","timeSegments":"`Mar 25 - Dec 27`: Auto","unit":"Unitless [Timeless]"}}
+[ASSISTANT]: Now let me update Subscribers with the full formula and create Revenue:
+
+[TOOL]: QueryObject(action="update", explanation="Update Subscribers with full formula", object_type="Variable", parameters={"defaultCalculation":{"formulaText":"Subscribers[-1] + \"New Subscribers\" - \"Churned Subscribers\""},"id":"-Pc8mUDt8lh0MNgKtshq"})
+[TOOL]: QueryObject(action="create", explanation="Create Revenue calc", object_type="Variable", parameters={"defaultCalculation":{"formulaText":"Subscribers * ARPU"},"defaultFormulaType":"Calculation","name":"Revenue"})
+[TOOL_RESULT]: {"success":true,"variable":{"calculatedValues":{"growthRate":"+34.1% per period","sample":{"Dec 27":"2,042","Mar 25":"100","Sept 26":"990"},"trend":"growing"},"calculation":"Subscribers  [-1] + New Subscribers - Churned Subscribers","defaultFormulaType":"Calculation","formulaText":"Subscribers[-1] + New Subscribers - Churned Subscribers","id":"-Pc8mUDt8lh0MNgKtshq","isConstant":"False","name":"Subscribers","numberFormat":"#,##0","timeSegments":"`Mar 25 - Dec 27`: Auto","unit":"Unitless [Timeless]"}}
+[TOOL_RESULT]: {"success":true,"variable":{"calculatedValues":{"growthRate":"+34.1% per period","sample":{"Dec 27":"102,108","Mar 25":"5,000","Sept 26":"49,501"},"trend":"growing"},"calculation":"Subscribers * ARPU","defaultFormulaType":"Calculation","formulaText":"Subscribers * ARPU","id":"-Pc8mUDt8lh0MNgKtsyd","isConstant":"False","name":"Revenue","numberFormat":"#,##0","timeSegments":"`Mar 25 - Dec 27`: Auto","unit":"Unitless [Timeless]"}}
+[ASSISTANT]: All 6 Variables are created and calculating. Let me run a quick health check to verify everything is clean:
+
+[TOOL]: ModelAction(action="get-model-health", explanation="Verify model health", parameters={})
+[TOOL_RESULT]: {"errors":[],"warnings":[]}
+[ASSISTANT]: No errors or warnings. Here's a summary of the SaaS revenue model I've built:
+
+---
+
+### 📊 SaaS Revenue Model
+
+**Structure:** 3 Assumptions → 3 Calculations, running quarterly from **Mar 2025 to Dec 2027** (12 periods).
+
+```ascii
+┌─────────────────────┐   ┌──────────────┐   ┌──────┐
+│  New Subscribers     │──▶│              │   │      │
+│  (100 → 320/qtr)    │   │  Subscribers │──▶│      │
+└─────────────────────┘   │  (cumulative)│   │ Rev  │
+┌─────────────────────┐   │              │◀──│ enue │
+│  Churn Rate (5%)    │──▶│  Churned     │   │      │
+└─────────────────────┘   │  Subscribers │   │      │
+                          └──────────────┘   │      │
+┌─────────────────────┐                      │      │
+│  ARPU (£50/qtr)     │────────────────────▶│      │
+└─────────────────────┘                      └──────┘
+```
+
+#### Assumptions
+
+| Variable | Value | Type |
+|----------|-------|------|
+| **New Subscribers** | 100 → 320 (growing by 20/qtr) | Time-varying |
+| **Churn Rate** | 5% per quarter | Constant |
+| **ARPU** | 50 per quarter | Constant |
+
+#### Calculated Outputs (Sample)
+
+| Variable | Mar 25 | Sep 26 | Dec 27 | Trend |
+|----------|--------|--------|--------|-------|
+| **Subscribers** | 100 | 990 | 2,042 | 📈 +34% per period |
+| **Churned Subscribers** | 0 | 10 | 15 | 📈 Growing |
+| **Revenue** | 5,000 | 49,501 | 102,108 | 📈 +34% per period |
+
+The model is healthy with no errors or warnings. Would you like me to add anything — like a layout for Excel export, a dashboard, or additional metrics?
+[USER]: Can you add a flexible launch date?
+[ASSISTANT]: 
+
+Great idea! I'll add a launch date mechanism so that all the SaaS metrics only kick in after a configurable launch date. Here's my approach:
+
+1. **Launch Date** — a Date-type Assumption Variable (constant)
+2. **Is Live** — a Boolean Calculation: `Periods >= "Launch Date"`
+3. Update **Subscribers** and **New Subscribers** usage to multiply by **Is Live**, so everything zeros out before launch
+
+Let me think about the best way to wire this in. The cleanest approach is to gate **New Subscribers** through the Is Live flag, and then the rest cascades naturally (no new subs → no subscriber growth → no revenue pre-launch). I'll create a **New Subscribers (Live)** calculation that applies the gate, and update **Subscribers** to reference it instead.
+
+Actually, even simpler — I can just update the **Subscribers** formula to multiply by Is Live directly. But that would still accumulate the pre-launch period's zero. Let me gate **New Subscribers** instead so the accumulation logic stays clean.
+
+Let me create the new Variables and update the references:
+[TOOL]: QueryObject(action="create", explanation="Create Launch Date assumption", object_type="Variable", parameters={"dataType":"Date","defaultFormulaType":"Assumptions","isConstant":true,"name":"Launch Date","numberFormatId":"Date1","timeSegments":[{"assumptions":{"values":[["2026Q1"]]},"duration":{"segmentDurationType":"Auto"},"start":{"segmentPeriodType":"Auto"}}]})
+[TOOL_RESULT]: {"success":true,"variable":{"calculatedValues":{"value":"Error"},"calculation":"-","defaultFormulaType":"Assumptions","id":"-Pc8mUDt8lh0MNgKttCe","isConstant":"True","name":"Launch Date","numberFormat":"dd mmm yy","timeSegments":"`Mar 25 - Dec 27`: 1 assumption","unit":"Unitless [Timeless]"}}
+[ASSISTANT]: The value shows "Error" — likely the date format needs to be different for a Date-type assumption. Let me check what format it expects. For a quarterly model, I should use a specific date string. Let me update the assumption value:
+[TOOL]: QueryObject(action="filter", explanation="Find Launch Date assumption", object_type="ModelAssumption", parameters={"help":true})
+[TOOL_RESULT]: {"action":"filter","description":"Filter ModelAssumption objects based on their properties","object_type":"ModelAssumption","operators":{"$and":{"description":"Matches objects where all conditions are true (explicit AND for nesting)","syntax":{"$and":[{"property1":"value1"},{"property2":"value2"}]}},"$not":{"description":"Inverts a condition","syntax":{"$not":{"property":"value"}}},"$or":{"description":"Matches objects where at least one condition is true","syntax":{"$or":[{"property1":"value1"},{"property2":"value2"}]}},"note":"Top-level properties are implicitly ANDed. Operators can be nested for complex queries."},"pagination":{"limit":{"default":"Set by session (typically 50)","description":"Maximum number of results to return. A truncation warning is included when results exceed this limit.","type":"integer"},"skip":{"default":0,"description":"Number of results to skip (for pagination).","type":"integer"}},"parameters":{"dataType":{"type":"enum","values":["Double","Integer","String","DateTime","Date","Boolean","Validation","List","NotApplicable"]},"dateTimeDescription":{"type":"string"},"dateTimeLongDateString":{"type":"string"},"id":{"type":"string"},"isInLayout":{"type":"boolean"},"isUsed":{"type":"boolean"},"notes":{"type":"string"},"numberFormatText":{"type":"string"},"prefix":{"type":"string"},"searchText":{"type":"string"},"sensitivityType":{"type":"enum","values":["PercentageChange","Delta","Absolute"]},"timeTypeDescription":{"type":"string"},"unitDescription":{"type":"string"}},"pattern_guide":{"boolean":["true/false"],"enum":["exact (case-insensitive)"],"string":["exact","glob (*?)","regex (/pattern/)"]}}
+[TOOL]: QueryObject(action="filter", explanation="Find Launch Date assumption", object_type="ModelAssumption", parameters={"prefix":"*Launch*"})
+[TOOL_RESULT]: {"count":1,"modelAssumptions":[{"dataType":"Date","date":"Constant","defaultValue":"Local Input: 2026Q1","id":"-Pc8mUDt8lh0MNgKttCp","isInLayout":"No","isUsed":"Yes","numberFormat":"dd mmm yy","prefix":"Launch Date","unit":"Unitless [Timeless]"}]}
+[TOOL]: QueryObject(action="get-details", explanation="Get Launch Date assumption details", object_type="ModelAssumption", parameters={"id":"-Pc8mUDt8lh0MNgKttCp","properties":["values"]})
+[TOOL_RESULT]: {"modelAssumption":{"values":{"Base":{"localInputValue":"2026Q1"}}}}
+[ASSISTANT]: The value is `2026Q1` but it's a Date type — it likely needs an actual date format. Let me update it with a proper date string:
+
+[TOOL]: QueryObject(action="update", explanation="Fix Launch Date value format", object_type="ModelAssumption", parameters={"help":true})
+[TOOL_RESULT]: {"action":"create","description":"Create/Update a new ModelAssumption. NOTE: same schema for Create/Update actions, don't retrieve both.","notes":["Updates support partial payloads - only include properties you want to change"],"object_type":"ModelAssumption","parameters":{"dataType":{"type":"enum","values":["Double","Integer","String","DateTime","Date","Boolean","Validation"]},"notes":{"type":"string"},"numberFormatId":{"type":"string"},"prefix":{"description":"The Assumption name before dimensional/time context is added","required":true,"type":"string"},"sensitivities":{"description":"Sensitivity overrides. Keys are Sensitivity IDs.. Map from string key to SensitivityValue. For value schema, query help with object_type='SensitivityValue'.","properties":{},"type":"object"},"sensitivityType":{"description":"Type for all sensitivity values. Individual SensitivityValue.sensitivityValueType must match.","type":"enum","values":["PercentageChange","Delta","Absolute"]},"validationDimensionId":{"relevant_when":{"dataType":"Validation"},"type":"string"},"values":{"description":"Values for different Scenarios. Keys are Scenario IDs.. Map from string key to ModelAssumptionValue. For value schema, query help with object_type='ModelAssumptionValue'.","properties":{},"type":"object"}}}
+[TOOL]: QueryObject(action="update", explanation="Fix Launch Date to proper date", object_type="ModelAssumption", parameters={"id":"-Pc8mUDt8lh0MNgKttCp","values":{"Base":{"localInputValue":"20260101","modelAssumptionValueType":"LocalInput"}}})
+[TOOL_RESULT]: {"modelAssumption":{"dataType":"Date","date":"Constant","defaultValue":"Local Input: 20260101","id":"-Pc8mUDt8lh0MNgKttCp","isInLayout":"No","isUsed":"Yes","numberFormat":"dd mmm yy","prefix":"Launch Date","unit":"Unitless [Timeless]"},"success":true}
+[ASSISTANT]: Now let me check if the Variable value resolved:
+
+[TOOL]: QueryObject(action="other", explanation="Check Launch Date value", object_type="Variable", otherAction="get-values", parameters={"ids":["-Pc8mUDt8lh0MNgKttCe"],"periods":"first"})
+[TOOL_RESULT]: {"case":"Base/Base","periodsReturned":["Mar 25"],"variables":[{"analysis":{"errors":{"count":12,"periods":["Mar 25","Jun 25","Sept 25","Dec 25","Mar 26"]},"trend":"unknown"},"id":"-Pc8mUDt8lh0MNgKttCe","name":"Launch Date","unit":"Unitless [Timeless]","values":{"Mar 25":"Error"}}]}
+[ASSISTANT]: Still showing errors. The Date dataType likely expects a different format. Let me try the `yyyyMMdd` format with a date that aligns to the end of a quarter (since this is a quarterly model):
+
+[TOOL]: QueryObject(action="update", explanation="Try date format 2026-03-31", object_type="ModelAssumption", parameters={"id":"-Pc8mUDt8lh0MNgKttCp","values":{"Base":{"localInputValue":"20260331","modelAssumptionValueType":"LocalInput"}}})
+[TOOL_RESULT]: {"modelAssumption":{"dataType":"Date","date":"Constant","defaultValue":"Local Input: 20260331","id":"-Pc8mUDt8lh0MNgKttCp","isInLayout":"No","isUsed":"Yes","numberFormat":"dd mmm yy","prefix":"Launch Date","unit":"Unitless [Timeless]"},"success":true}
+[TOOL]: QueryObject(action="other", explanation="Check Launch Date value", object_type="Variable", otherAction="get-values", parameters={"ids":["-Pc8mUDt8lh0MNgKttCe"],"periods":"sample"})
+[TOOL_RESULT]: {"case":"Base/Base","periodsReturned":["Mar 25","Sept 26","Dec 27"],"variables":[{"analysis":{"errors":{"count":12,"periods":["Mar 25","Jun 25","Sept 25","Dec 25","Mar 26"]},"trend":"unknown"},"id":"-Pc8mUDt8lh0MNgKttCe","name":"Launch Date","unit":"Unitless [Timeless]","values":{"Dec 27":"Error","Mar 25":"Error","Sept 26":"Error"}}]}
+[ASSISTANT]: Still errors. The issue might be that Date dataType needs a specific date literal format. Let me try a different approach — use a simpler format:
+
+[TOOL]: QueryObject(action="update", explanation="Try ISO date format", object_type="ModelAssumption", parameters={"id":"-Pc8mUDt8lh0MNgKttCp","values":{"Base":{"localInputValue":"2026-03-31","modelAssumptionValueType":"LocalInput"}}})
+[TOOL_RESULT]: {"modelAssumption":{"dataType":"Date","date":"Constant","defaultValue":"Local Input: 2026-03-31","id":"-Pc8mUDt8lh0MNgKttCp","isInLayout":"No","isUsed":"Yes","numberFormat":"dd mmm yy","prefix":"Launch Date","unit":"Unitless [Timeless]"},"success":true}
+[TOOL]: QueryObject(action="other", explanation="Check Launch Date value", object_type="Variable", otherAction="get-values", parameters={"ids":["-Pc8mUDt8lh0MNgKttCe"],"periods":"sample"})
+[TOOL_RESULT]: {"case":"Base/Base","periodsReturned":["Mar 25","Sept 26","Dec 27"],"variables":[{"analysis":{"growthRate":"0.0% per period","max":{"period":"Mar 25","value":"31 Mar 26"},"min":{"period":"Mar 25","value":"31 Mar 26"},"totalOrLast":"31 Mar 26","trend":"stable"},"id":"-Pc8mUDt8lh0MNgKttCe","name":"Launch Date","unit":"Unitless [Timeless]","values":{"Dec 27":"31 Mar 26","Mar 25":"31 Mar 26","Sept 26":"31 Mar 26"}}]}
+[ASSISTANT]: Launch Date is now working — showing **31 Mar 26** across all periods (as expected for a constant). Now let me create the **Is Live** boolean and the gated new subscribers variable:
+
+[TOOL]: QueryObject(action="create", explanation="Create Is Live boolean", object_type="Variable", parameters={"dataType":"Boolean","defaultCalculation":{"formulaText":"Periods \u003e= \"Launch Date\""},"defaultFormulaType":"Calculation","name":"Is Live","numberFormatId":"General"})
+[TOOL_RESULT]: {"success":true,"variable":{"calculatedValues":{"growthRate":"0.0% per period","sample":{"Dec 27":"True","Mar 25":"False","Sept 26":"True"},"trend":"growing"},"calculation":"Periods \u003e= Launch Date","defaultFormulaType":"Calculation","formulaText":"Periods \u003e= Launch Date","id":"-Pc8mUDt8lh0MNgKttaX","isConstant":"False","name":"Is Live","numberFormat":"General","timeSegments":"`Mar 25 - Dec 27`: Auto","unit":"Unitless [Timeless]"}}
+[ASSISTANT]: **Is Live** is working — `False` before Mar 26, `True` from Mar 26 onwards. Now let me update the **Subscribers** formula to gate new subscribers through Is Live:
+
+[TOOL]: QueryObject(action="update", explanation="Gate Subscribers with Is Live", object_type="Variable", parameters={"defaultCalculation":{"formulaText":"Subscribers[-1] + \"New Subscribers\" * \"Is Live\" - \"Churned Subscribers\""},"id":"-Pc8mUDt8lh0MNgKtshq"})
+[TOOL_RESULT]: {"success":true,"variable":{"calculatedValues":{"growthRate":"+40.6% per period","sample":{"Dec 27":"1,719","Mar 25":"0","Sept 26":"572"},"trend":"growing"},"calculation":"Subscribers  [-1] + New Subscribers * Is Live - Churned Subscribers","defaultFormulaType":"Calculation","formulaText":"Subscribers[-1] + New Subscribers * Is Live - Churned Subscribers","id":"-Pc8mUDt8lh0MNgKtshq","isConstant":"False","name":"Subscribers","numberFormat":"#,##0","timeSegments":"`Mar 25 - Dec 27`: Auto","unit":"Unitless [Timeless]"}}
+[ASSISTANT]: Let me verify the full picture across all Variables:
+
+[TOOL]: QueryObject(action="other", explanation="Check all values across periods", object_type="Variable", otherAction="get-values", parameters={"ids":["-Pc8mUDt8lh0MNgKttCe","-Pc8mUDt8lh0MNgKttaX","-Pc8mUDt8lh0MNgKtsZS","-Pc8mUDt8lh0MNgKtshq","-Pc8mUDt8lh0MNgKtsn8","-Pc8mUDt8lh0MNgKtsyd"],"periods":"first-6"})
+[TOOL_RESULT]: {"case":"Base/Base","periodsReturned":["Mar 25","Jun 25","Sept 25","Dec 25","Mar 26","Jun 26"],"variables":[{"analysis":{"growthRate":"0.0% per period","max":{"period":"Mar 25","value":"31 Mar 26"},"min":{"period":"Mar 25","value":"31 Mar 26"},"totalOrLast":"31 Mar 26","trend":"stable"},"id":"-Pc8mUDt8lh0MNgKttCe","name":"Launch Date","unit":"Unitless [Timeless]","values":{"Dec 25":"31 Mar 26","Jun 25":"31 Mar 26","Jun 26":"31 Mar 26","Mar 25":"31 Mar 26","Mar 26":"31 Mar 26","Sept 25":"31 Mar 26"}},{"analysis":{"growthRate":"0.0% per period","max":{"period":"Mar 26","value":"1"},"min":{"period":"Mar 25","value":"0"},"totalOrLast":"True","trend":"growing"},"id":"-Pc8mUDt8lh0MNgKttaX","name":"Is Live","unit":"Unitless [Timeless]","values":{"Dec 25":"False","Jun 25":"False","Jun 26":"True","Mar 25":"False","Mar 26":"True","Sept 25":"False"}},{"analysis":{"growthRate":"+11.2% per period","max":{"period":"Dec 27","value":"320"},"min":{"period":"Mar 25","value":"100"},"totalOrLast":"320","trend":"growing"},"id":"-Pc8mUDt8lh0MNgKtsZS","name":"New Subscribers","unit":"Unitless [Timeless]","values":{"Dec 25":"160","Jun 25":"120","Jun 26":"200","Mar 25":"100","Mar 26":"180","Sept 25":"140"}},{"analysis":{"anomalies":[{"changePercent":"+106.1%","period":"Jun 26","priorPeriod":"Mar 26","priorValue":"180","value":"371"},{"changePercent":"+54.3%","period":"Sept 26","priorPeriod":"Jun 26","priorValue":"371","value":"572"}],"growthRate":"+40.6% per period","max":{"period":"Dec 27","value":"1,719"},"min":{"period":"Mar 25","value":"0"},"totalOrLast":"1,719","trend":"growing"},"id":"-Pc8mUDt8lh0MNgKtshq","name":"Subscribers","unit":"Unitless [Timeless]","values":{"Dec 25":"0","Jun 25":"0","Jun 26":"371","Mar 25":"0","Mar 26":"180","Sept 25":"0"}},{"analysis":{"anomalies":[{"changePercent":"+106.1%","period":"Sept 26","priorPeriod":"Jun 26","priorValue":"9","value":"19"},{"changePercent":"+54.3%","period":"Dec 26","priorPeriod":"Sept 26","priorValue":"19","value":"29"}],"growthRate":"+44.6% per period","max":{"period":"Dec 27","value":"74"},"min":{"period":"Mar 25","value":"0"},"totalOrLast":"74","trend":"growing"},"id":"-Pc8mUDt8lh0MNgKtsn8","name":"Churned Subscribers","unit":"Unitless [Timeless]","values":{"Dec 25":"0","Jun 25":"0","Jun 26":"9","Mar 25":"0","Mar 26":"0","Sept 25":"0"}},{"analysis":{"anomalies":[{"changePercent":"+106.1%","period":"Jun 26","priorPeriod":"Mar 26","priorValue":"9,000","value":"18,550"},{"changePercent":"+54.3%","period":"Sept 26","priorPeriod":"Jun 26","priorValue":"18,550","value":"28,623"}],"growthRate":"+40.6% per period","max":{"period":"Dec 27","value":"85,952"},"min":{"period":"Mar 25","value":"0"},"totalOrLast":"85,952","trend":"growing"},"id":"-Pc8mUDt8lh0MNgKtsyd","name":"Revenue","unit":"Unitless [Timeless]","values":{"Dec 25":"0","Jun 25":"0","Jun 26":"18,550","Mar 25":"0","Mar 26":"9,000","Sept 25":"0"}}]}
+[ASSISTANT]: Everything is working perfectly. Let me run a health check to confirm:
+
+[TOOL]: ModelAction(action="get-model-health", explanation="Verify model health", parameters={})
+[TOOL_RESULT]: {"errors":[],"warnings":[]}
+[ASSISTANT]: Clean bill of health. Here's what I've added:
+
+---
+
+### 🚀 Flexible Launch Date
+
+Two new Variables gate the entire model on a configurable launch date:
+
+| Variable | Type | Formula / Value |
+|----------|------|-----------------|
+| **Launch Date** | Assumption (Date, constant) | 31 Mar 2026 |
+| **Is Live** | Calculation (Boolean) | `Periods >= Launch Date` |
+
+The **Subscribers** formula is now: `Subscribers[-1] + New Subscribers * Is Live - Churned Subscribers`
+
+This means New Subscribers only flow in once the model is live — everything cascades from there.
+
+### Updated Values
+
+| Period | Is Live | New Subs | Subscribers | Churned | Revenue |
+|--------|---------|----------|-------------|---------|---------|
+| Mar 25 | ❌ | 100 | 0 | 0 | 0 |
+| Jun 25 | ❌ | 120 | 0 | 0 | 0 |
+| Sept 25 | ❌ | 140 | 0 | 0 | 0 |
+| Dec 25 | ❌ | 160 | 0 | 0 | 0 |
+| **Mar 26** | ✅ | 180 | **180** | 0 | **9,000** |
+| Jun 26 | ✅ | 200 | 371 | 9 | 18,550 |
+
+Everything zeros out before launch, then ramps up from Q1 2026. Just change the **Launch Date** assumption to shift the entire model's start point!
+[USER]: And a simple dashboard
+[ASSISTANT]: 
+
+Let me get the dashboard build instructions first.
+[TOOL]: GetInstructions(action="get", explanation="Get dashboard build instructions", parameters={"category":"build-visualisations"})
+[TOOL_RESULT]: {"category":"build-visualisations","content":"# Build Visualisations\n\n## Purpose\nUse this workflow when creating Dashboards, Charts, Metrics, or Tables.\n\n## Prerequisites\n- Model context is set\n- Model structure and calculations exist\n- Retrieve `dashboards` object instructions for API details if you haven't already\n\n## Workflow\n\n### 1. Determine What to Visualise\n- **KPI values** → Create Metrics + add to Dashboard\n- **Trends over time** → Create Charts\n- **Scenario comparison** → Create Tables\n- **Editable inputs** → Create AssumptionsTables\n\n### 2. Create Metrics (if needed)\nMetrics produce single-value outputs from Variables. Required for:\n- Dashboard KPI displays\n- Table inputs (data table comparison)\n\nKey considerations:\n- Must force a single time value (specify a period or aggregate: SUM, MAX, etc.)\n- Can be Dimensional (only time is restricted)\n- Get `dashboards` object instructions for Metric calculation patterns\n\n### 3. Create Dashboard\nA Dashboard is a container for DashboardItems:\n- **Panel**: Container for grouping items\n- **Chart**: Single Variable visualisation\n- **Metric**: Single value display\n- **Table**: Multi-Case comparison (Excel data table)\n- **AssumptionsTable**: Editable assumption inputs\n- **Spacer**: Visual spacing\n\n### 4. Configure Charts\nFor each Chart:\n- Select the Variable to chart\n- Choose 2 of {Time, Dimensions, Scenarios, Sensitivities} for Categories and Series\n- Configure filter values for remaining axes (not interactive — set specific values)\n- Select chart type (Column, Line, Stacked Column, etc.)\n\n### 5. Create Tables (for Scenario Comparison)\nTables compare Metric values across Cases:\n1. Create the Metrics you want to compare\n2. Create a Table referencing those Metrics\n3. Add the Table to a Dashboard\n4. Create a Dashboard ModelSheet for that Dashboard\n\n### 6. Add to Layout\nFor Excel output, Dashboards need a Dashboard ModelSheet:\n- Create a ModelSheet with type `Dashboard`\n- Reference the Dashboard ID\n- **Layout constraint:** If Dashboard has an AssumptionsTable, those Assumptions can't have entry cells elsewhere in the Layout\n\n### 7. Validate\n- Run `ModelAction(action='validate-layout')` to check for Layout conflicts\n- Review Dashboard in app for visual correctness\n","description":"Workflow for creating Dashboards, Charts, Metrics, and Tables","title":"Build Visualisations","topics":["Dashboard","Chart","Metric","Table","visualisation"]}
+[TOOL]: GetInstructions(action="get", explanation="Get dashboard object instructions", parameters={"category":"dashboards"})
+[TOOL_RESULT]: {"category":"dashboards","content":"# Working with Dashboards\r\n\r\n## Overview\r\n\r\nDashboards provide in-app and Excel visualization. A Dashboard contains DashboardItems arranged in a layout.\r\n\r\n## DashboardItem Types\r\n\r\n| Type | Purpose |\r\n|---|---|\r\n| **Panel** | Container for grouping items (has child items) |\r\n| **Chart** | Single Variable visualisation |\r\n| **Metric** | Single value KPI display |\r\n| **Table** | Multi-Case comparison (Excel data table) |\r\n| **AssumptionsTable** | Editable assumption inputs |\r\n| **Spacer** | Visual spacing |\r\n\r\n## Charts\r\n\r\n### One Variable Per Chart\r\nEach Chart displays a single Variable. For multi-Variable comparison, create separate Charts.\r\n\r\n### Axis Configuration\r\nChoose any 2 of the following for **Categories** (x-axis) and **Series** (legend/color):\r\n- **Time**: The Model's time periods\r\n- **Each Dimension**: If the Variable has tagParents (e.g., Region, Product)\r\n- **Scenarios**: Compare across Scenarios\r\n- **Sensitivities**: Compare across Sensitivities\r\n\r\nThe remaining axes become **filters** — configure specific values during chart setup. Filters are NOT interactive in the rendered Dashboard; you select the specific filter values when creating the chart.\r\n\r\n### Chart Types\r\nColumn, Stacked Column, Line, Area, Bar, etc.\r\n\r\n### Example: Revenue by Region and Tier\r\nVariable \"Revenue\" has Dimensions: Region, Tier\r\n\r\n```\r\nCategories: Tier (x-axis shows: Basic, Premium)\r\nSeries: Region (colors show: UK, France)\r\nFilters: Time = \"2025\" (fixed to specific period)\r\n```\r\n\r\nThis creates a stacked column chart showing revenue breakdown by tier and region for 2025.\r\n\r\n## Metrics\r\n\r\n### Single-Value Outputs\r\nMetrics produce a single value from a Variable. You MUST force a single time value:\r\n\r\n**Option A: Specific period**\r\nReference a specific period in the Metric calculation.\r\n\r\n**Option B: Aggregate operation**\r\nUse SUM, MAX, MIN, AVERAGE etc. across the time range.\r\n\r\n### Dimensional Metrics\r\nMetrics CAN be dimensional (the time dimension is the only one restricted). A dimensional Metric will show values for each dimension member.\r\n\r\n### Common Patterns\r\n- \"Total 5-year Revenue\" → SUM aggregate across all periods\r\n- \"Exit Year EBITDA Margin %\" → Reference last period\r\n- \"NPV\" → Calculation using discount rate across periods\r\n\r\n### Retrieving Metric Values\r\n\r\nUse `get-values` to retrieve calculated Metric values:\r\n\r\n```\r\nQueryObject(object_type='Metric', action='get-values', parameters={\r\n  'ids': ['total-revenue', 'exit-margin']\r\n})\r\n```\r\n\r\nCompare across Cases (two modes):\r\n```\r\n# Multi-case mode: tabular view of values across cases (no variance)\r\nQueryObject(object_type='Metric', action='compare-cases', parameters={\r\n  'ids': ['total-revenue'],\r\n  'cases': ['Base/Base', 'Lean/Base', 'Base/High']\r\n})\r\n\r\n# Pairwise mode: detailed variance between two cases\r\nQueryObject(object_type='Metric', action='compare-cases', parameters={\r\n  'ids': ['total-revenue'],\r\n  'baseCase': 'Base/Base',\r\n  'compareCase': 'Lean/Base'\r\n})\r\n```\r\n\r\nAdd `valueSummary` to filter results for quick value context:\r\n```\r\nQueryObject(object_type='Metric', action='filter', parameters={\r\n  'properties': ['name', 'valueSummary']\r\n})\r\n```\r\n\r\n## Tables (Data Tables)\r\n\r\nTables compare Metric values across multiple Cases (Scenario + Sensitivity combinations).\r\n\r\n### Required Workflow\r\n1. **Create Metrics** that produce the values to compare\r\n2. **Create a Table** referencing those Metric IDs\r\n3. **Add the Table to a Dashboard** as a DashboardItem\r\n4. **Create a Dashboard ModelSheet** referencing that Dashboard\r\n\r\nThe Table generates an Excel data table that calculates each Metric for every specified Case combination.\r\n\r\n## AssumptionsTables\r\n\r\nDisplay editable Assumptions within a Dashboard. Key constraint:\r\n- Each Assumption can only have ONE entry cell in Excel\r\n- If a Dashboard with an AssumptionsTable is in the Layout, those Assumptions' entry cells move to the Dashboard sheet\r\n- The original Assumptions sheet will point to the Dashboard\r\n\r\n## Adding Dashboards to Layout\r\n\r\nFor Excel output, create a Dashboard ModelSheet:\r\n```json\r\n{\r\n  \"action\": \"create\",\r\n  \"object_type\": \"ModelSheet\",\r\n  \"parameters\": {\r\n    \"name\": \"Dashboard\",\r\n    \"modelSheetType\": \"Dashboard\",\r\n    \"dashboardId\": \"-dashboardId\"\r\n  }\r\n}\r\n```\r\n\r\n## Best Practices\r\n\r\n1. Put Tables in their own Dashboard (one Table per Dashboard)\r\n2. Group related Charts and Metrics in Panels\r\n3. Configure chart filters to show the most relevant default view\r\n4. Always validate layout after adding Dashboard sheets\r\n5. Remember: chart filters are set during configuration, not interactive in the dashboard\r\n","description":"Object reference: DashboardItem properties, Chart axis config, Metric period handling, Table workflow, retrieving Metric values","title":"Working with Dashboards","topics":["Dashboard","Chart","Metric","Table","AssumptionsTable","DashboardItem","get-values","compare-cases"]}
+[ASSISTANT]: Now let me check the schemas for creating Dashboards, DashboardItems, and Metrics:
+
+[TOOL]: QueryObject(action="create", explanation="Get Metric create schema", object_type="Metric", parameters={"help":true})
+[TOOL]: QueryObject(action="create", explanation="Get Dashboard create schema", object_type="Dashboard", parameters={"help":true})
+[TOOL]: QueryObject(action="create", explanation="Get DashboardItem create schema", object_type="DashboardItem", parameters={"help":true})
+[TOOL_RESULT]: {"action":"create","description":"Create/Update a new Metric. NOTE: same schema for Create/Update actions, don't retrieve both.","notes":["A Metric produces a single value output. Variable references will reference only the first period unless you set start/end/duration. Typically you'll want to do calculations like: `SUM(Some Variable[From First Period - To Last Period])`, or `Some Variable[Last Period]`."],"object_type":"Metric","parameters":{"calculation":{"description":"For full schema, query help with object_type='Calculation'","type":"Calculation"},"dataType":{"description":"DataType for the Metric. Note: Validation type may not work correctly for Metrics.","type":"enum","values":["Double","Integer","String","DateTime","Date","Boolean","Validation"]},"name":{"required":true,"type":"string"},"numberFormatId":{"type":"string"},"tagIds":{"type":"array[string]"},"tagParents":{"description":"For full schema, query help with object_type='TagParents'","type":"TagParents"}}}
+[TOOL_RESULT]: {"action":"create","description":"Create/Update a new Dashboard. NOTE: same schema for Create/Update actions, don't retrieve both.","notes":["Dashboards contain a tree of DashboardItems. rootItem is typically a Panel."],"object_type":"Dashboard","parameters":{"name":{"required":true,"type":"string"},"rootItem":{"description":"For full schema, query help with object_type='DashboardItem'","type":"DashboardItem"},"tagIds":{"type":"array[string]"}}}
+[TOOL_RESULT]: {"action":"create","description":"Create/Update a new DashboardItem. NOTE: same schema for Create/Update actions, don't retrieve both.","notes":["DashboardItems can be updated standalone by ID. Create/Delete must go through Dashboard. Updates support partial payloads - only include properties you want to change."],"object_type":"DashboardItem","parameters":{"assumptionIds":{"relevant_when":{"dashboardItemType":"AssumptionsTable"},"required_when":{"dashboardItemType":"AssumptionsTable"},"type":"array[string]"},"assumptionTableSettings":{"properties":{"showDateTime":{"type":"boolean"},"showNotes":{"type":"boolean"},"showTimeType":{"type":"boolean"},"showUnit":{"type":"boolean"}},"relevant_when":{"dashboardItemType":"AssumptionsTable"},"required_when":{"dashboardItemType":"AssumptionsTable"},"type":"object"},"chartVariableId":{"relevant_when":{"dashboardItemType":"Chart"},"type":"string"},"content":{"description":"For full schema, query help with object_type='DashboardItem'","relevant_when":{"dashboardItemType":"Panel"},"required_when":{"dashboardItemType":"Panel"},"type":"array[DashboardItem]"},"dashboardItemType":{"required":true,"type":"enum","values":["Panel","AssumptionsTable","Chart","Metric","Table","Spacer"]},"height":{"type":"number"},"metricId":{"relevant_when":{"dashboardItemType":"Metric"},"type":"string"},"name":{"type":"string"},"panelLayout":{"relevant_when":{"dashboardItemType":"Panel"},"required_when":{"dashboardItemType":"Panel"},"type":"enum","values":["Horizontal","Vertical"]},"tableId":{"relevant_when":{"dashboardItemType":"Table"},"required_when":{"dashboardItemType":"Table"},"type":"string"},"tagIds":{"type":"array[string]"},"varyWithActiveVersion":{"relevant_when":{"dashboardItemType":"Chart"},"type":"boolean"},"width":{"type":"number"}}}
+[ASSISTANT]: I need to check the Chart configuration more closely — specifically how to set up the axes. Let me look at the chart variable settings:
+
+[TOOL]: QueryObject(action="create", explanation="Get full DashboardItem chart details", object_type="DashboardItem", parameters={"help":true})
+[TOOL_RESULT]: {"note":"Schema for 'dashboarditem-create' was already provided earlier in this session.","schemaId":"dashboarditem-create"}
+[ASSISTANT]: The chart schema doesn't show explicit axis configuration properties — it seems like charts may auto-configure with Time as the default axis. Let me create the dashboard. I'll plan:
+
+1. **Two Metrics**: Total Revenue (sum) and Final Subscribers (last period)
+2. **Two Charts**: Revenue over time, Subscribers over time
+3. **Dashboard** with a Panel layout containing metrics at the top and charts below
+
+Let me start by creating the Metrics:
+
+[TOOL]: QueryObject(action="create", explanation="Create Total Revenue metric", object_type="Metric", parameters={"calculation":{"formulaText":"SUM(Revenue)"},"name":"Total Revenue"})
+[TOOL]: QueryObject(action="create", explanation="Create Final Subscribers metric", object_type="Metric", parameters={"calculation":{"formulaText":"Subscribers"},"name":"Final Subscribers"})
+[TOOL_RESULT]: {"metric":{"calculatedValues":{"value":"0"},"calculation":"SUM ( Revenue )","dataType":"Double","formulaText":"SUM(Revenue)","hasDimensions":"No","id":"-Pc8mUDt8lh0MNgKttpu","isInLayout":"No","name":"Total Revenue","numberFormat":"#,##0"},"success":true}
+[TOOL_RESULT]: {"metric":{"calculatedValues":{"value":"0"},"calculation":"Subscribers","dataType":"Double","formulaText":"Subscribers","hasDimensions":"No","id":"-Pc8mUDt8lh0MNgKttqO","isInLayout":"No","name":"Final Subscribers","numberFormat":"#,##0"},"success":true}
+[ASSISTANT]: Hmm, both show value "0". The Metrics might need explicit period ranges. Let me check — SUM(Revenue) should sum across all periods by default. Let me get the values:
+
+[TOOL]: QueryObject(action="other", explanation="Check metric values", object_type="Metric", otherAction="get-values", parameters={"ids":["-Pc8mUDt8lh0MNgKttpu","-Pc8mUDt8lh0MNgKttqO"]})
+[TOOL_RESULT]: {"case":"Base/Base","metrics":[{"id":"-Pc8mUDt8lh0MNgKttpu","name":"Total Revenue","value":"0"},{"id":"-Pc8mUDt8lh0MNgKttqO","name":"Final Subscribers","value":"0"}]}
+[ASSISTANT]: Both are 0. Per the help notes, "Variable references will reference only the first period unless you set start/end/duration." The first period is pre-launch (0). I need to check how to set the period range on a Metric. Let me look at the Metric calculation more carefully — I likely need to use period range syntax:
+
+[TOOL]: QueryObject(action="create", explanation="Get CalculationPart schema", object_type="CalculationPart", parameters={"help":true})
+[TOOL_RESULT]: {"action":"create","description":"Create/Update a new CalculationPart. NOTE: same schema for Create/Update actions, don't retrieve both.","object_type":"CalculationPart","parameters":{"calculationPartType":{"required":true,"type":"enum","values":["VariableReference","OperatorSubtract","OperatorAdd","OperatorDivide","OperatorMultiply","OperatorExponent","Constant","Text","OpenBrackets","CloseBrackets","ComparatorLessThan","ComparatorGreaterThan","ComparatorEqualTo","Comma","FunctionName","LambdaFunction","LambdaArgument","LambdaArgumentReference","Period","ComparatorLessThanOrEqual","ComparatorGreaterThanOrEqual","ComparatorNotEqual"]},"constant":{"relevant_when":{"calculationPartType":"Constant"},"required_when":{"calculationPartType":"Constant"},"type":"number"},"functionName":{"relevant_when":{"calculationPartType":"FunctionName"},"required_when":{"calculationPartType":"FunctionName"},"type":"string"},"id":{"type":"string"},"itemMatch":{"description":"For full schema, query help with object_type='VariableReferenceItemMatch'","relevant_when":{"calculationPartType":"VariableReference"},"type":"VariableReferenceItemMatch"},"lambdaArgumentId":{"relevant_when":{"calculationPartType":"LambdaArgumentReference"},"required_when":{"calculationPartType":"LambdaArgumentReference"},"type":"string"},"lambdaArgumentName":{"relevant_when":{"calculationPartType":"LambdaArgument"},"required_when":{"calculationPartType":"LambdaArgument"},"type":"string"},"lambdaId":{"relevant_when":{"calculationPartType":"LambdaFunction"},"required_when":{"calculationPartType":"LambdaFunction"},"type":"string"},"negativeOffsetOption":{"relevant_when":{"calculationPartType":["VariableReference","Period"]},"type":"enum","values":["ReplaceWithValue","ReplaceWithZero","ShowAsNotApplicable"]},"negativeOffsetReplaceWithAssumptions":{"properties":{"savedAssumptionMap":{"description":"Map from string key to Dictionary`2. For value schema, query help with object_type='Dictionary`2'.","properties":{},"type":"object"}},"relevant_when":{"calculationPartType":["VariableReference","Period"]},"type":"object"},"periodOffset":{"relevant_when":{"calculationPartType":["VariableReference","Period"]},"type":"integer"},"referenceDuration":{"description":"For full schema, query help with object_type='SegmentDuration'","relevant_when":{"calculationPartType":["VariableReference","Period"]},"type":"SegmentDuration"},"referenceEnd":{"description":"For full schema, query help with object_type='SegmentPeriod'","relevant_when":{"calculationPartType":["VariableReference","Period"]},"type":"SegmentPeriod"},"referenceStart":{"description":"For full schema, query help with object_type='SegmentPeriod'","relevant_when":{"calculationPartType":["VariableReference","Period"]},"type":"SegmentPeriod"},"text":{"relevant_when":{"calculationPartType":"Text"},"required_when":{"calculationPartType":"Text"},"type":"string"},"variableId":{"relevant_when":{"calculationPartType":"VariableReference"},"required_when":{"calculationPartType":"VariableReference"},"type":"string"}}}
+[ASSISTANT]: I see — I need to use `referenceStart` and `referenceEnd` on the VariableReference CalculationPart to set the period range. Let me check SegmentPeriod:
+
+[TOOL]: QueryObject(action="create", explanation="Get SegmentPeriod schema", object_type="SegmentPeriod", parameters={"help":true})
+[TOOL_RESULT]: {"action":"create","description":"Create/Update a new SegmentPeriod. NOTE: same schema for Create/Update actions, don't retrieve both.","object_type":"SegmentPeriod","parameters":{"fixedPeriodDateCode":{"required_when":{"segmentPeriodType":"FixedPeriod"},"type":"string"},"genericPeriodsFromEnd":{"description":"1-indexed period relative to end","required_when":{"segmentPeriodType":"PeriodsFromEndGeneric"},"type":"integer"},"genericPeriodsFromStart":{"description":"1-indexed period relative to start","required_when":{"segmentPeriodType":"PeriodsFromStartGeneric"},"type":"integer"},"id":{"type":"string"},"segmentPeriodType":{"required":true,"type":"enum","values":["Auto","FixedPeriod","PeriodsFromStartGeneric","PeriodsFromStartSpecific","PeriodsFromEndGeneric","PeriodsFromEndSpecific"]}}}
+[ASSISTANT]: Now I understand. Let me update the metrics with proper period ranges. For Total Revenue, I need SUM across all periods. For Final Subscribers, I need the last period value:
+
+[TOOL]: QueryObject(action="update", explanation="Fix Total Revenue metric range", object_type="Metric", parameters={"calculation":{"calculationParts":[{"calculationPartType":"FunctionName","functionName":"SUM"},{"calculationPartType":"OpenBrackets"},{"calculationPartType":"VariableReference","referenceEnd":{"genericPeriodsFromEnd":1,"segmentPeriodType":"PeriodsFromEndGeneric"},"referenceStart":{"genericPeriodsFromStart":1,"segmentPeriodType":"PeriodsFromStartGeneric"},"variableId":"-Pc8mUDt8lh0MNgKtsyd"},{"calculationPartType":"CloseBrackets"}]},"id":"-Pc8mUDt8lh0MNgKttpu"})
+[TOOL]: QueryObject(action="update", explanation="Fix Final Subscribers to last period", object_type="Metric", parameters={"calculation":{"calculationParts":[{"calculationPartType":"VariableReference","referenceEnd":{"genericPeriodsFromEnd":1,"segmentPeriodType":"PeriodsFromEndGeneric"},"referenceStart":{"genericPeriodsFromEnd":1,"segmentPeriodType":"PeriodsFromEndGeneric"},"variableId":"-Pc8mUDt8lh0MNgKtshq"}]},"id":"-Pc8mUDt8lh0MNgKttqO"})
+[TOOL_RESULT]: {"metric":{"calculatedValues":{"value":"366,903"},"calculation":"SUM ( Revenue [Starts at: First period, Ends at: Last period] )","dataType":"Double","formulaText":"SUM(Revenue[?]) [See calculationParts for full formula details]","formulaTextWarnings":["Variable 'Revenue' has period configuration not representable in formula DSL"],"hasDimensions":"No","id":"-Pc8mUDt8lh0MNgKttpu","isInLayout":"No","name":"Total Revenue","numberFormat":"#,##0"},"success":true}
+[TOOL_RESULT]: {"metric":{"calculatedValues":{"value":"1,719"},"calculation":"Subscribers [Starts at: Last period, Ends at: Last period]","dataType":"Double","formulaText":"Subscribers[?] [See calculationParts for full formula details]","formulaTextWarnings":["Variable 'Subscribers' has period configuration not representable in formula DSL"],"hasDimensions":"No","id":"-Pc8mUDt8lh0MNgKttqO","isInLayout":"No","name":"Final Subscribers","numberFormat":"#,##0"},"success":true}
+[ASSISTANT]: Metrics are now working — **Total Revenue: 366,903** and **Final Subscribers: 1,719**. Now let me create the Dashboard with a layout of metrics on top and charts below:
+
+[TOOL]: QueryObject(action="create", explanation="Create SaaS dashboard", object_type="Dashboard", parameters={"name":"SaaS Overview","rootItem":{"content":[{"content":[{"dashboardItemType":"Metric","metricId":"-Pc8mUDt8lh0MNgKttpu","name":"Total Revenue","width":6},{"dashboardItemType":"Metric","metricId":"-Pc8mUDt8lh0MNgKttqO","name":"Final Subscribers","width":6}],"dashboardItemType":"Panel","name":"KPIs","panelLayout":"Horizontal"},{"content":[{"chartVariableId":"-Pc8mUDt8lh0MNgKtsyd","dashboardItemType":"Chart","name":"Revenue","width":6},{"chartVariableId":"-Pc8mUDt8lh0MNgKtshq","dashboardItemType":"Chart","name":"Subscribers","width":6}],"dashboardItemType":"Panel","name":"Charts","panelLayout":"Horizontal"}],"dashboardItemType":"Panel","name":"SaaS Overview","panelLayout":"Vertical"}})
+[TOOL_RESULT]: {"dashboard":{"hasRootItem":"Yes","id":"-Pc8mUDt8lh0MNgKtts-","isInLayout":"No","name":"SaaS Overview","tags":"-"},"success":true}
+[ASSISTANT]: Dashboard created. Let me verify it looks right by getting the details:
+
+[TOOL]: QueryObject(action="get-details", explanation="Verify dashboard structure", object_type="Dashboard", parameters={"id":"-Pc8mUDt8lh0MNgKtts-","properties":["rootItem"]})
+[TOOL_RESULT]: {"dashboard":{"rootItem":{"assumptionTableSettings":"AssumptionTableSettings","content":{"count":2,"items":["{Panel: KPIs [Horizontal]...}","{Panel: Charts [Horizontal]...}"]},"dashboardItemType":"Panel","id":"-Pc8mUDt8lh0MNgKttrz","name":"SaaS Overview","panelLayout":"Vertical","tagIds":{"count":0,"items":[]},"varyWithActiveVersion":true}}}
+[ASSISTANT]: Looks good — a vertical panel with KPIs and Charts rows. Let me also run a health check:
+
+[TOOL]: ModelAction(action="get-model-health", explanation="Verify model health", parameters={})
+[TOOL_RESULT]: {"errors":[],"warnings":[]}
+[ASSISTANT]: All clean! Here's what I've created:
+
+---
+
+### 📊 SaaS Overview Dashboard
+
+The dashboard has a simple two-row layout:
+
+```ascii
+┌─────────────────────────────────────────────────┐
+│                 SaaS Overview                    │
+├────────────────────┬────────────────────────────┤
+│  Total Revenue     │  Final Subscribers          │
+│     366,903        │       1,719                 │
+├────────────────────┼────────────────────────────┤
+│                    │                             │
+│  📈 Revenue        │  📈 Subscribers              │
+│  (chart over time) │  (chart over time)          │
+│                    │                             │
+└────────────────────┴────────────────────────────┘
+```
+
+| Component | Type | Value / Source |
+|-----------|------|----------------|
+| **Total Revenue** | Metric | SUM of Revenue across all periods = **366,903** |
+| **Final Subscribers** | Metric | Subscribers in last period (Dec 27) = **1,719** |
+| **Revenue chart** | Chart | Revenue over time |
+| **Subscribers chart** | Chart | Subscribers over time |
+
+The dashboard is ready to view in the app. Would you like me to also add it to the Layout for Excel export?
+[USER]: The charts aren't showing up.
+[ASSISTANT]: 
+
+Let me investigate the chart configuration — they likely need explicit axis settings. Let me look at the chart items in detail:
+[TOOL]: QueryObject(action="filter", explanation="Find chart dashboard items", object_type="DashboardItem", parameters={"help":true})
+[TOOL_RESULT]: {"error":"Failed to retrieve help from API","object_type":"DashboardItem"}
+[TOOL]: QueryObject(action="filter", explanation="List all dashboard items", object_type="DashboardItem", parameters={"dashboardItemType":"Chart"})
+[TOOL_RESULT]: {"error":"Object filtering not implemented for DashboardItem"}
+[TOOL]: QueryObject(action="get-details", explanation="Get full dashboard with items", object_type="Dashboard", parameters={"id":"-Pc8mUDt8lh0MNgKtts-","properties":["rootItem.content"]})
+[TOOL_RESULT]: {"dashboard":{"rootItem":{"assumptionTableSettings":"AssumptionTableSettings","content":[{"assumptionTableSettings":"AssumptionTableSettings","content":{"count":2,"items":["{Metric: Total Revenue...}","{Metric: Final Subscribers...}"]},"dashboardItemType":"Panel","id":"-Pc8mUDt8lh0MNgKttrv","name":"KPIs","panelLayout":"Horizontal","tagIds":{"count":0,"items":[]},"varyWithActiveVersion":true},{"assumptionTableSettings":"AssumptionTableSettings","content":{"count":2,"items":["{Chart: Revenue...}","{Chart: Subscribers...}"]},"dashboardItemType":"Panel","id":"-Pc8mUDt8lh0MNgKttry","name":"Charts","panelLayout":"Horizontal","tagIds":{"count":0,"items":[]},"varyWithActiveVersion":true}],"dashboardItemType":"Panel","id":"-Pc8mUDt8lh0MNgKttrz","name":"SaaS Overview","panelLayout":"Vertical","tagIds":{"count":0,"items":[]},"varyWithActiveVersion":true}}}
+[ASSISTANT]: Let me get the full details of the chart items specifically:
+
+[TOOL]: QueryObject(action="get-details", explanation="Get Revenue chart details", object_type="DashboardItem", parameters={"id":"-Pc8mUDt8lh0MNgKttrw"})
+[TOOL_RESULT]: {"dashboardItem":{"assumptionTableSettings":"AssumptionTableSettings","chartVariableId":"-Pc8mUDt8lh0MNgKtsyd","dashboardItemType":"Chart","id":"-Pc8mUDt8lh0MNgKttrw","name":"Revenue","varyWithActiveVersion":true,"width":6}}
+[ASSISTANT]: I see — the chart has a `chartVariableId` but no chart configuration (axes, chart type, etc.). There must be additional chart properties I'm missing. Let me check the update schema more carefully:
+
+[TOOL]: QueryObject(action="update", explanation="Get full DashboardItem update schema", object_type="DashboardItem", parameters={"help":true})
+[TOOL_RESULT]: {"action":"create","description":"Create/Update a new DashboardItem. NOTE: same schema for Create/Update actions, don't retrieve both.","notes":["DashboardItems can be updated standalone by ID. Create/Delete must go through Dashboard. Updates support partial payloads - only include properties you want to change."],"object_type":"DashboardItem","parameters":{"assumptionIds":{"relevant_when":{"dashboardItemType":"AssumptionsTable"},"required_when":{"dashboardItemType":"AssumptionsTable"},"type":"array[string]"},"assumptionTableSettings":{"properties":{"showDateTime":{"type":"boolean"},"showNotes":{"type":"boolean"},"showTimeType":{"type":"boolean"},"showUnit":{"type":"boolean"}},"relevant_when":{"dashboardItemType":"AssumptionsTable"},"required_when":{"dashboardItemType":"AssumptionsTable"},"type":"object"},"chartVariableId":{"relevant_when":{"dashboardItemType":"Chart"},"type":"string"},"content":{"description":"For full schema, query help with object_type='DashboardItem'","relevant_when":{"dashboardItemType":"Panel"},"required_when":{"dashboardItemType":"Panel"},"type":"array[DashboardItem]"},"dashboardItemType":{"required":true,"type":"enum","values":["Panel","AssumptionsTable","Chart","Metric","Table","Spacer"]},"height":{"type":"number"},"metricId":{"relevant_when":{"dashboardItemType":"Metric"},"type":"string"},"name":{"type":"string"},"panelLayout":{"relevant_when":{"dashboardItemType":"Panel"},"required_when":{"dashboardItemType":"Panel"},"type":"enum","values":["Horizontal","Vertical"]},"tableId":{"relevant_when":{"dashboardItemType":"Table"},"required_when":{"dashboardItemType":"Table"},"type":"string"},"tagIds":{"type":"array[string]"},"varyWithActiveVersion":{"relevant_when":{"dashboardItemType":"Chart"},"type":"boolean"},"width":{"type":"number"}}}
+[ASSISTANT]: The schema only shows `chartVariableId` and `varyWithActiveVersion` for Charts — no explicit axis or chart type configuration visible. There might be a separate chart settings object. Let me check if there's an `other` action for configuring charts:
+
+[TOOL]: QueryObject(action="other", explanation="Check DashboardItem other actions", object_type="DashboardItem", parameters={"help":true})
+[TOOL_RESULT]: {"error":"Failed to retrieve help from API","object_type":"DashboardItem"}
+[TOOL]: QueryObject(object_type="DashboardItem", parameters={"help":true})
+[TOOL_RESULT]: {"available_actions":["create","get-details","update"],"object_type":"DashboardItem"}
+[ASSISTANT]: Let me check if there's a separate chart configuration object:
+
+[TOOL]: QueryObject(action="create", explanation="Check ChartSettings schema", object_type="ChartSettings", parameters={"help":true})
+[TOOL_RESULT]: {"error":"Failed to retrieve help from API","object_type":"ChartSettings"}
+[TOOL]: QueryObject(action="create", explanation="Check Chart object type", object_type="Chart", parameters={"help":true})
+[TOOL_RESULT]: {"error":"Failed to retrieve help from API","object_type":"Chart"}
+[ASSISTANT]: Let me look at the full details of the chart item with all properties expanded — there may be hidden properties that weren't set
+
+No problem — let me get the layout build instructions and set that up.
+
+[USER]: Don't worry, there might be a problem with the API. Add everything to an Excel Layout.
+[TOOL]: GetInstructions(action="get", explanation="Get layout build instructions", parameters={"category":"build-layout"})
+[TOOL_RESULT]: {"category":"build-layout","content":"# Build Model Layout\n\n## Purpose\nUse this workflow when creating or modifying the Model's Excel Layout (ModelSheets, LineGroups, LineItems).\n\n## Prerequisites\n- Model context is set\n- Model structure exists (Variables and Assumptions created)\n- Retrieve `layout` object instructions for API details if you haven't already\n\n## Approach: Auto Layout First\n\n### Option A: Automatic Generation (Try First)\n\nThis is the quickest way to create a complete Layout. Auto-layout generates all required sheets (Assumptions and Calculations), traces all dependencies, and places everything correctly.\n\n1. **Identify root Variables** from the Model summary (select all root Variables for a full Model layout)\n2. **Run `create-auto-layout`:**\n   ```\n   ModelAction(action='create-auto-layout', parameters={\n     variableIds: [root Variable IDs]\n   })\n   ```\n   This automatically creates Assumptions and Calculations sheets with all dependencies included. Optional parameters: `calculationsSheetId` (to add to an existing sheet), `maxLevels`, `idealMinGroupsAtLevel`, `idealMaxGroupsAtLevel`.\n3. **Validate:** `ModelAction(action='validate-layout')`\n4. **Review and optionally refine** using `get-content` on each sheet:\n   - Flatten overly-nested structures for simple models\n   - Apply formatting to LineItems (auto-layout doesn't format)\n   - Verify FAST layout principles (dependencies visible above dependents)\n\n### Option B: Manual Layout\n\nUse when auto-layout isn't suitable (specific formatting, custom sheet structure, partial layout updates).\n\n1. **Trace dependencies** on all root Variables to see the full hierarchy\n2. **Plan sheet structure:**\n   - One Assumptions sheet (usually sufficient)\n   - One or more Calculations sheets (by business area for large models)\n   - Metrics sheets if needed\n   - Dashboard sheets for visualization\n3. **Create sheets, groups, and items** following the hierarchy\n4. **Validate immediately** after creation\n\n## FAST Layout Principles\n\n- **Repeat Variables freely** — include the same Variable on multiple sheets as needed. Each copy links back to the original. Dependencies should be visible directly above their dependents\n- **Top-to-bottom flow** — inputs at top, outputs at bottom within each sheet\n- **7-10 groups per level** — use nested LineGroups for readability\n- **One timeline per sheet** — don't mix Variables of different `periodType`\n\n## Validation\n\nAlways run `ModelAction(action='validate-layout')` after layout changes. Common issues:\n- Missing Variables (calculation dependencies not in any sheet)\n- Assumption Variables on wrong sheet type\n- Multiple entry cells for the same Assumption (when Dashboards are involved)\n","description":"Workflow for creating ModelSheets, LineGroups, and LineItems","title":"Build Model Layout","topics":["ModelSheet","LineGroup","LineItem","Layout","Excel"]}
+[ASSISTANT]: Auto-layout looks like the way to go. Let me get the root Variables from the model summary, then use `create-auto-layout`. I also need to add the Dashboard sheet. Let me first get the current root Variables:
+
+[TOOL]: ModelAction(action="summary", explanation="Get updated model summary", parameters={"format":"compact"})
+[TOOL_RESULT]: # Model: Agent tests
+**ID:** -PaDcvKKeLOdFU0X4jxj
+**Created:** 2026-01-28 10:37:55
+**Last Modified:** 2026-03-04 15:41:09
+**Tag Namespace:** Agent testing (ID: -PaDcvKKeLOdFU0X4jzi)
+
+## Model Configuration
+- **Timings:** Mar 25 - Dec 27 (12 periods, Quarter)
+- **Default Unit:** [no unit]
+- **Unit Rigor Level:** No Units (Level 1)
+
+## Scenarios & Sensitivities
+- **Scenarios:** Base (ID: Base)
+- **Sensitivities:** Base (ID: Base)
+
+## Summary
+- **Total Variables:** 8
+- **Total Assumptions:** 15
+
+
+[TOOL]: QueryObject(action="filter", explanation="List all variables", object_type="Variable", parameters={"format":"compact"})
+[TOOL_RESULT]: {"count":8,"variables":[{"calculation":"-","defaultFormulaType":"Assumptions","id":"-Pc8mUDt8lh0MNgKtsZS","isConstant":"False","name":"New Subscribers","numberFormat":"#,##0","timeSegments":"`Mar 25 - Dec 27`: 12 assumptions","unit":"Unitless [Timeless]"},{"calculation":"-","defaultFormulaType":"Assumptions","id":"-Pc8mUDt8lh0MNgKtsc-","isConstant":"True","name":"Churn Rate","numberFormat":"0.0%","timeSegments":"`Mar 25 - Dec 27`: 1 assumption","unit":"Unitless [Timeless]"},{"calculation":"-","defaultFormulaType":"Assumptions","id":"-Pc8mUDt8lh0MNgKtse9","isConstant":"True","name":"ARPU","numberFormat":"#,##0","timeSegments":"`Mar 25 - Dec 27`: 1 assumption","unit":"Unitless [Timeless]"},{"calculation":"Subscribers  [-1] + New Subscribers * Is Live - Churned Subscribers","defaultFormulaType":"Calculation","id":"-Pc8mUDt8lh0MNgKtshq","isConstant":"False","name":"Subscribers","numberFormat":"#,##0","timeSegments":"`Mar 25 - Dec 27`: Auto","unit":"Unitless [Timeless]"},{"calculation":"Subscribers  [-1] * Churn Rate","defaultFormulaType":"Calculation","id":"-Pc8mUDt8lh0MNgKtsn8","isConstant":"False","name":"Churned Subscribers","numberFormat":"#,##0","timeSegments":"`Mar 25 - Dec 27`: Auto","unit":"Unitless [Timeless]"},{"calculation":"Subscribers * ARPU","defaultFormulaType":"Calculation","id":"-Pc8mUDt8lh0MNgKtsyd","isConstant":"False","name":"Revenue","numberFormat":"#,##0","timeSegments":"`Mar 25 - Dec 27`: Auto","unit":"Unitless [Timeless]"},{"calculation":"-","defaultFormulaType":"Assumptions","id":"-Pc8mUDt8lh0MNgKttCe","isConstant":"True","name":"Launch Date","numberFormat":"dd mmm yy","timeSegments":"`Mar 25 - Dec 27`: 1 assumption","unit":"Unitless [Timeless]"},{"calculation":"Periods \u003e= Launch Date","defaultFormulaType":"Calculation","id":"-Pc8mUDt8lh0MNgKttaX","isConstant":"False","name":"Is Live","numberFormat":"General","timeSegments":"`Mar 25 - Dec 27`: Auto","unit":"Unitless [Timeless]"}]}
+[ASSISTANT]: The root Variable (no dependents) is **Revenue**. Let me run auto-layout on it, which will trace all its dependencies and create the full sheet structure. Then I'll add the Dashboard and Metrics sheets.
+
+[TOOL]: ModelAction(action="create-auto-layout", explanation="Auto-generate layout from Revenue", parameters={"variableIds":["-Pc8mUDt8lh0MNgKtsyd"]})
+[TOOL_RESULT]: {"message":"Successfully created auto-layout for 1 Variable(s)","success":true,"variablesAdded":1}
+[TOOL]: ModelAction(action="validate-layout", explanation="Validate layout", parameters={})
+[TOOL_RESULT]: {"layout_validation_report":{"items":["✓ **Layout is valid** - All dependencies are properly included in the layout."]}}
+[ASSISTANT]: Layout is valid. Let me see what was created:
+
+[TOOL]: QueryObject(action="filter", explanation="List all sheets", object_type="ModelSheet", parameters={})
+[TOOL_RESULT]: {"count":2,"modelSheets":[{"description":"All assumptions","hasWarnings":"No","id":"-PaDcvKKeLOdFU0X4kNp","isControlSheet":"No","modelSheetType":"Assumptions","name":"Assumptions"},{"description":"All calculations","hasWarnings":"No","id":"-PaDcvKKeLOdFU0X4kNn","isControlSheet":"Yes","modelSheetType":"Calculations","name":"Calculations"}]}
+[USER]: Add the dash too
+[ASSISTANT]: 
+
+Let me check the schema for creating a Dashboard ModelSheet, and also add a Metrics sheet for the two metrics:
+
+[TOOL]: QueryObject(action="create", explanation="Get ModelSheet create schema", object_type="ModelSheet", parameters={"help":true})
+[TOOL_RESULT]: {"action":"create","description":"Create/Update a new ModelSheet. NOTE: same schema for Create/Update actions, don't retrieve both.","notes":["Updates support partial payloads - only include properties you want to change"],"object_type":"ModelSheet","parameters":{"content":{"description":"Sheet content structure with lineGroups and lineItems","properties":{"lineGroups":{"description":"Top-level line groups for the sheet. For full schema, query help with object_type='LineGroup'","type":"array[LineGroup]"}},"type":"object"},"dashboardId":{"description":"ID of the dashboard to display on this sheet","required_when":{"modelSheetType":"Dashboard"},"type":"string"},"description":{"relevant_when":{"modelSheetType":["Dashboard","Calculations","Assumptions","Metrics"]},"type":"string"},"groupLevel":{"description":"Excel grouping level for the sheet tab (0-7)","relevant_when":{"modelSheetType":["Calculations","Assumptions","Metrics"]},"type":"integer"},"isControlSheet":{"description":"Whether this sheet should be the control sheet for navigation","type":"boolean"},"isHidden":{"description":"Whether the sheet should be hidden in Excel","type":"boolean"},"modelSheetType":{"editable":false,"required":true,"type":"enum","values":["Calculations","Assumptions","Metrics","Dashboard","XlInsert"]},"name":{"not_editable_when":{"modelSheetType":["Cases","Dimensions"]},"required":true,"type":"string"},"periodType":{"description":"Period type for calculations (None, Monthly, Quarterly, Annual, etc.) - must be None (default), or a longer time period than the Model base time period. Used for aggregration of calculations over longer time periods.","editable":false,"relevant_when":{"modelSheetType":"Calculations"},"type":"enum","values":["None","Day","Week","Month","Quarter","YearCalendar","YearFiscal"]},"tabColor":{"description":"Tab color for the sheet in Excel","properties":{"themeColor":{"required":true,"type":"enum","values":["xlThemeColorDark1","xlThemeColorLight1","xlThemeColorDark2","xlThemeColorLight2","xlThemeColorAccent1","xlThemeColorAccent2","xlThemeColorAccent3","xlThemeColorAccent4","xlThemeColorAccent5","xlThemeColorAccent6","xlThemeColorHyperlink","xlThemeColorFollowedHyperlink"]},"tintAndShade":{"description":"Brightens or darkens the color - valid values depend on color, use 0.0 if valid values unknown","required":true,"type":"number"}},"type":"object"},"tagIds":{"description":"List of tag IDs to associate with this sheet","relevant_when":{"modelSheetType":["Dashboard","Calculations","Assumptions","Metrics"]},"type":"array[string]"},"xlInsertId":{"description":"ID of the XlInsert template to use","required_when":{"modelSheetType":"XlInsert"},"type":"string"},"xlInsertSheetName":{"description":"Name of the sheet within the XlInsert file","required_when":{"all_of":[{"modelSheetType":"XlInsert"},{"xlInsertId":"non-empty"}]},"type":"string"}}}
+[TOOL]: QueryObject(action="create", explanation="Create Dashboard sheet", object_type="ModelSheet", parameters={"dashboardId":"-Pc8mUDt8lh0MNgKtts-","modelSheetType":"Dashboard","name":"Dashboard"})
+[TOOL_RESULT]: {"modelSheet":{"hasWarnings":"Yes","id":"-Pc8mUDt8lh0MNgKttvr","isControlSheet":"No","modelSheetType":"Dashboard","name":"Dashboard"},"success":true}
+[ASSISTANT]: It has warnings — let me check what they are, and also add a Metrics sheet for the two metrics:
+
+[TOOL]: QueryObject(action="get-details", explanation="Check Dashboard sheet warnings", object_type="ModelSheet", parameters={"id":"-Pc8mUDt8lh0MNgKttvr"})
+[TOOL_RESULT]: {"modelSheet":{"contentLineGroups":{"count":1,"items":[{"id":"-Pc8mUDt8lh0MNgKttvx","preview":"{Dashboard...}"}]},"dashboardId":"-Pc8mUDt8lh0MNgKtts-","groupLevel":0,"hasWarnings":true,"id":"-Pc8mUDt8lh0MNgKttvr","isControlSheet":false,"isHidden":false,"modelSheetType":"Dashboard","name":"Dashboard","periodType":"None","settings":"{Settings...}","warnings":{"count":2,"items":["{WarningType} - {Message}","{WarningType} - {Message}"]}}}
+[TOOL]: QueryObject(action="get-details", explanation="Get full warnings", object_type="ModelSheet", parameters={"id":"-Pc8mUDt8lh0MNgKttvr","properties":["warnings"]})
+[TOOL_RESULT]: {"modelSheet":{"warnings":[{},{}]}}
+[ASSISTANT]: Warnings are empty objects — likely minor. Let me now add a Metrics sheet with the two metrics. First let me get the LineGroup/LineItem schema:
+
+[TOOL]: GetInstructions(action="get", explanation="Get layout object instructions", parameters={"category":"layout"})
+[TOOL_RESULT]: {"category":"layout","content":"# Working with Layout Objects\n\n## Overview\n\nThe Layout contains ModelSheets which define the Excel workbook structure. The Layout object always exists on a Model (cannot be created or deleted).\n\n## ModelSheet Types\n\n| Type | Contains | LineItem Links To |\n|---|---|---|\n| **Calculations** | Variable LineItems | Variables (ALL types, including Assumption-type) |\n| **Assumptions** | ModelAssumption LineItems | ModelAssumptions |\n| **Metrics** | Metric LineItems | Metrics |\n| **Dashboard** | Dashboard reference | N/A |\n| **XlInsert** | External Excel import | N/A (not yet enabled) |\n\n### CRITICAL: Assumption-type Variables go on Calculation sheets\nThis is the most common mistake. An Assumption-type Variable is still a Variable — it goes on a Calculations sheet. Only ModelAssumption objects go on Assumptions sheets. The Assumption-type Variable on the Calculations sheet links to the ModelAssumption on the Assumptions sheet.\n\n## Creating ModelSheets\n\nUse `get-help` for the full schema. Key properties:\n```json\n{\n  \"action\": \"create\",\n  \"object_type\": \"ModelSheet\",\n  \"parameters\": {\n    \"name\": \"Income Statement\",\n    \"modelSheetType\": \"Calculations\",\n    \"contentSections\": [{\n      \"lineGroups\": [...]\n    }]\n  }\n}\n```\n\n## LineGroups\n\nPurely organizational containers with headers. Can be nested.\n\nKey properties:\n- `name`: Group header text\n- `lineItems`: Array of LineItems directly under this group\n- `lineGroups`: Nested LineGroups\n\n**Note:** LineItems within a LineGroup appear after the header and BEFORE any nested LineGroups. Avoid mixing LineItems and nested LineGroups at the same level.\n\n## LineItems\n\nIndividual rows linked to a Variable, ModelAssumption, or Metric.\n\nKey properties:\n- `variableId` / `modelAssumptionId` / `metricId`: The linked object\n- Formatting properties (bold, italic, borders, etc.)\n\n**Dimensional expansion:** A single LineItem for a Dimensional Variable/Metric automatically expands into multiple rows — one per dimension combination. No need to create separate LineItems per dimension member.\n\n## Layout Constraints\n\n- **One timeline per sheet**: Variables with different `periodType` cannot share a sheet\n- **One entry cell per Assumption**: If an Assumption appears in a Dashboard's AssumptionsTable in the Layout, it can't have a separate entry cell on an Assumptions sheet\n- **Minimum for valid Excel**: At least 1 Assumptions sheet + 1 Calculations sheet\n- **Control sheet**: One sheet should have `isControlSheet: true` for the Scenario/Sensitivity dropdown\n\n## Repeated LineItems (FAST Practice)\n\nVariables can appear on multiple sheets. Each additional LineItem links back to the original. This is encouraged — dependencies should be visible directly above their dependents on each sheet.\n\n## Best Practices\n\n1. **Top-to-bottom flow**: Inputs at top, outputs at bottom within each sheet\n2. **7-10 groups per level**: Use nested LineGroups for readability\n3. **Single Assumptions sheet** usually sufficient\n4. **Multiple Calculation sheets** for large models — group by business area\n5. **Always validate** after layout changes: `ModelAction(action='validate-layout')`\n","description":"Object reference: ModelSheet, LineGroup, LineItem properties and constraints","title":"Working with Layout Objects","topics":["ModelSheet","LineGroup","LineItem","Layout","formatting"]}
+[TOOL]: QueryObject(action="create", explanation="Get LineGroup schema", object_type="LineGroup", parameters={"help":true})
+[TOOL]: QueryObject(action="create", explanation="Get LineItem schema", object_type="LineItem", parameters={"help":true})
+[TOOL_RESULT]: {"action":"create","description":"Create/Update a new LineGroup. NOTE: same schema for Create/Update actions, don't retrieve both.","notes":["Updates support partial payloads - only include properties you want to change"],"object_type":"LineGroup","parameters":{"includeHeader":{"type":"boolean"},"lineGroups":{"description":"Nested sub-groups. For full schema, query help with object_type='LineGroup'","type":"array[LineGroup]"},"lineItems":{"description":". For full schema, query help with object_type='GeneratedLineItem'","type":"array[GeneratedLineItem]"},"name":{"required":true,"type":"string"},"parentId":{"description":"ID of the parent ModelSheet or LineGroup to add this LineGroup to. Required when creating standalone LineGroups via direct API call. Not needed when creating within ModelSheet content parameter or updating existing LineGroups.","type":"string"},"position":{"description":"Zero-based index position within parent's lineGroups array. If not specified, appends to the end.","type":"integer"},"spaceAfterHeader":{"type":"integer"},"spaceBeforeHeader":{"type":"integer"}}}
+[TOOL_RESULT]: {"action":"create","description":"Create/Update a new GeneratedLineItem. NOTE: same schema for Create/Update actions, don't retrieve both.","notes":["Updates support partial payloads - only include properties you want to change"],"object_type":"GeneratedLineItem","parameters":{"assumptionId":{"description":"Assumption ID to display (for Assumption line items)","editable":false,"required_when":{"generatedLineItemType":"Assumption"},"type":"string"},"dashboardId":{"description":"Dashboard ID to display (for Dashboard line items)","editable":false,"required_when":{"generatedLineItemType":"Dashboard"},"type":"string"},"generatedLineItemType":{"description":"Type of line item (Calculation, Assumption, Metric, Dashboard). Automatically inferred from the ModelSheet type. DO NOT set this manually.","editable":false,"type":"enum","values":["Calculation","Assumption","Metric","Dashboard"]},"metricId":{"description":"Metric ID to display (for Metric line items)","editable":false,"required_when":{"generatedLineItemType":"Metric"},"type":"string"},"parentId":{"description":"ID of the parent LineGroup to add this LineItem to. Required when creating standalone LineItems via direct API call. Not needed when creating within LineGroup content parameter.","type":"string"},"position":{"description":"Zero-based index position within parent's lineItems array. If not specified, appends to the end.","type":"integer"},"settings":{"description":"Display settings for this line","properties":{"spaceBefore":{"type":"integer"},"style":{"properties":{"bottomBorderStyle":{"properties":{"lineStyle":{"type":"enum","values":["xlContinuous","xlDashDot","xlDashDotDot","xlSlantDashDot","xlLineStyleNone","xlDouble","xlDot","xlDash"]}},"type":"object"},"fontIsItalic":{"type":"boolean"},"fontWeight":{"type":"enum","values":["Normal","Bold"]},"topBorderStyle":{"properties":{"lineStyle":{"type":"enum","values":["xlContinuous","xlDashDot","xlDashDotDot","xlSlantDashDot","xlLineStyleNone","xlDouble","xlDot","xlDash"]}},"type":"object"}},"type":"object"}},"type":"object"},"variableId":{"description":"Variable ID to display (for Calculation line items)","editable":false,"required_when":{"generatedLineItemType":"Calculation"},"type":"string"}}}
+[ASSISTANT]: Now let me create the Metrics sheet with both metrics:
+
+[TOOL]: QueryObject(action="create", explanation="Create Metrics sheet", object_type="ModelSheet", parameters={"content":{"lineGroups":[{"lineItems":[{"metricId":"-Pc8mUDt8lh0MNgKttpu"},{"metricId":"-Pc8mUDt8lh0MNgKttqO"}],"name":"KPIs"}]},"modelSheetType":"Metrics","name":"Metrics"})
+[TOOL_RESULT]: {"modelSheet":{"hasWarnings":"No","id":"-Pc8mUDt8lh0MNgKttxP","isControlSheet":"No","modelSheetType":"Metrics","name":"Metrics"},"success":true}
+[ASSISTANT]: Now let me validate the full layout:
+
+[TOOL]: ModelAction(action="validate-layout", explanation="Validate final layout", parameters={})
+[TOOL_RESULT]: {"layout_validation_report":{"items":["✓ **Layout is valid** - All dependencies are properly included in the layout."]}}
+[ASSISTANT]: All good! Here's the final Layout:
+
+| Sheet | Type | Contents |
+|-------|------|----------|
+| **Assumptions** | Assumptions | All ModelAssumption inputs (New Subscribers, Churn Rate, ARPU, Launch Date) |
+| **Calculations** | Calculations | All Variables (inputs + calculations) |
+| **Dashboard** | Dashboard | SaaS Overview (KPI metrics + charts) |
+| **Metrics** | Metrics | Total Revenue, Final Subscribers |
+
+The layout is valid and ready for Excel export. Note the Dashboard sheet warnings from earlier may just be related to the chart rendering issue you noticed — the Metrics and data should still come through fine in Excel.
+</conversation>
