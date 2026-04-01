@@ -161,6 +161,27 @@ Sweep over `incrementalInterval` [15k, 30k, 50k, 80k] × `toolCallCycles` [80, 1
 
 ---
 
+## pRetrieveMax Sensitivity (Exp 009)
+
+Sweep over `pRetrieveMax` [0.0–1.0] × `toolCallCycles` [100, 150, 200] for `lcm-subagent` and `incremental`, calibrated baseline.
+
+### Crossover thresholds
+
+| toolCallCycles | pRetrieveMax where incremental wins | lcm advantage at default (0.2) |
+|---|---|---|
+| 100 | ~0.27 | +0.5% (negligible) |
+| 150 | ~0.47 | +4.2% |
+| 200 | ~0.77 | +8.2% |
+
+**Key findings:**
+1. **At pRetrieveMax=0, lcm-subagent still wins** (+3–11% by session length). The advantage is structural — full-replacement compaction produces a more cache-stable context prefix. Retrieval pricing is secondary.
+2. **Default pRetrieveMax=0.2 is conservatively positioned.** The store fills gradually, so average p(retrieve) during a session is ~0.05–0.10. The recommendation is robust.
+3. **Crossover threshold scales with session length.** Longer sessions → more compactions → more cache savings → more budget to absorb retrieval overhead.
+4. **At 100-cycle sessions, the margin is thin** (0.5%). The recommendation holds but is nearly indifferent at this length.
+5. **At ≥150 cycles, the recommendation is robust** — crossover at 0.47–0.77, far above operational range.
+
+---
+
 ## Cross-Experiment Conclusions
 
 ### Strategy recommendation for Models Agent
@@ -183,11 +204,12 @@ Sweep over `incrementalInterval` [15k, 30k, 50k, 80k] × `toolCallCycles` [80, 1
 
 1. **Compression ratio**: No quality penalty for over-compression. Model always prefers higher ratios.
 2. **Compaction frequency**: No latency cost or quality-degradation cost for over-compaction. Model always prefers shorter intervals.
-3. **Retrieval quality**: `pRetrieveMax` is fixed; in reality retrieval should degrade with higher compression or more distant history.
+3. **Retrieval quality**: `pRetrieveMax` is fixed; in reality retrieval should degrade with higher compression or more distant history. Exp 009 characterised the sensitivity — recommendation is robust at ≥150 cycles.
 
 ### Open questions for future phases
 
-- **`pRetrieveMax` sensitivity**: How sensitive is lcm-subagent's advantage to retrieval success rate? What happens to the recommendation if retrieval degrades?
+- **compressedTokensCap sensitivity**: How does store fill-rate affect when retrieval overhead kicks in? Smaller cap = earlier retrieval pressure.
+- **Combined stress test**: Under worst-case conditions (short session + elevated pRetrieveMax), which strategy wins?
 - **Crossover shift**: How does the ~89 cycle crossover shift under different compression ratios or tool result sizes?
 - **Latency modelling**: Can compaction frequency trade-offs be evaluated when wall-clock time matters?
 
@@ -205,3 +227,4 @@ Sweep over `incrementalInterval` [15k, 30k, 50k, 80k] × `toolCallCycles` [80, 1
 | 006 | #71 | Compression ratio sensitivity | done | lcm-subagent wins at all ratios; peak at ratio=5 (15.23%); default ratio=10 recommended |
 | 007 | #73 | lcm-subagent vs incremental crossover | done | Crossover at ~89 cycles; lcm-subagent wins unconditionally in practice |
 | 008 | #74 | incrementalInterval sensitivity | done | 15k "cheapest" is a model artefact; 30k default recommended; engine: NumericValuesRange |
+| 009 | #86 | pRetrieveMax sensitivity | done | lcm-subagent wins structurally (cache, not retrieval); robust at ≥150 cycles; thin margin at 100 cycles |
