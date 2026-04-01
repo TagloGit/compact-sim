@@ -123,6 +123,21 @@ When you've finished your work for this iteration, output one of these signals a
 
 You **must** output exactly one of these three words as your final line, with no other text on that line.
 
+### Iteration Summary
+
+Include a structured summary block in your final response, **immediately before** the exit signal line. Use this exact format:
+
+```
+## Iteration Summary
+- **Type:** Planning | Experiment | Synthesis | Other
+- **Issue(s):** #N, #M (or "none" if planning/housekeeping)
+- **Work done:** 1-2 sentence description of tools run, sweeps executed, analyses performed
+- **Outcome:** 1-2 sentence key finding or result
+- **Next:** What the next iteration should pick up
+```
+
+The harness extracts this block to display between iterations. Keep each line concise — the goal is at-a-glance visibility, not a full write-up.
+
 ## Findings (`experiments/FINDINGS.md`)
 
 This is the shared knowledge base across iterations. **Read it at the start of every iteration. Update it whenever you establish something reusable.**
