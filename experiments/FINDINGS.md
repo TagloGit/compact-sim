@@ -208,31 +208,39 @@ Incremental cost is constant (cap-insensitive by design).
 
 ### Strategy recommendation for Models Agent
 
-**Use `lcm-subagent` unconditionally.** It is the cheapest strategy for sessions ≥ 90 cycles, and the penalty at shorter sessions is negligible ($0.022). Avoid `full-compaction` in all cases.
+**Use `lcm-subagent` unconditionally.** Across 10 experiments spanning Phase 1 (baselines and parameter sweeps) and Phase 2 (retrieval stress tests), lcm-subagent is the cheapest strategy in every realistic scenario.
 
-| Session length | Recommended strategy | Rationale |
-|---|---|---|
-| Any length | `lcm-subagent` | Cheapest ≥90 cycles; negligible penalty <90 cycles |
-| — | Avoid `full-compaction` | Always most expensive; 50–100% more than competitors |
+| Session length | Strategy | Cost advantage over next-best | Confidence |
+|---|---|---|---|
+| ≥150 cycles | `lcm-subagent` | 4–11% over incremental | High — robust to all tested perturbations |
+| 90–150 cycles | `lcm-subagent` | 0.5–4% over incremental | Medium — thin but consistent advantage |
+| <90 cycles | `lcm-subagent` (or any except full-compaction) | Negligible | Low — nearly indifferent at this length |
+| Any length | Avoid `full-compaction` | 50–100% more expensive | Very high |
 
-### Parameter recommendations
+**Why lcm-subagent wins** (Exp 009 insight): The advantage is structural — full-replacement compaction produces a more cache-stable context prefix. This drives cache reuse savings that persist even with retrieval disabled. Retrieval pricing amplifies but does not create the advantage.
+
+### Implementation parameters for Models Agent
 
 | Parameter | Recommended value | Notes |
 |---|---|---|
-| `compressionRatio` | 10 (default) | Higher appears cheaper in model but is an artefact; 10× is achievable in practice |
-| `incrementalInterval` | 30,000 (default) | 15k appears cheapest but is a model artefact; 30k avoids over-summarisation risk |
+| `selectedStrategy` | `lcm-subagent` | Use unconditionally |
+| `compressionRatio` | 10 (default) | Higher appears cheaper in model but is a modelling artefact; 10× is practically achievable |
+| `incrementalInterval` | 30,000 (default) | 15k appears cheapest but is a modelling artefact; 30k avoids over-summarisation risk |
+| `pRetrieveMax` | 0.2 (default) | Well within safe zone; recommendation flips only at 0.27–0.77 depending on session length |
+| `compressedTokensCap` | 100,000 (default) | Secondary lever; 25× variation → 3.4% cost swing; default well-positioned |
 
-### Modelling limitations identified
+### Modelling limitations (do not over-interpret)
 
-1. **Compression ratio**: No quality penalty for over-compression. Model always prefers higher ratios.
-2. **Compaction frequency**: No latency cost or quality-degradation cost for over-compaction. Model always prefers shorter intervals.
-3. **Retrieval quality**: `pRetrieveMax` is fixed; in reality retrieval should degrade with higher compression or more distant history. Exp 009 characterised the sensitivity — recommendation is robust at ≥150 cycles.
+1. **Compression ratio**: No quality penalty for over-compression — model always prefers higher ratios. Real-world compression quality degrades before 10×.
+2. **Compaction frequency**: No latency or quality-degradation cost for over-compaction — model always prefers shorter intervals. Real compaction has latency overhead.
+3. **Retrieval quality**: `pRetrieveMax` is fixed and doesn't degrade with store size. Exp 009 showed the recommendation remains robust unless average retrieval rates are implausibly high (>30–80% of steps).
+4. **Conversation determinism**: Simulated conversations are deterministic averages. Real conversations have higher variance in tool result sizes and cycle counts.
 
-### Open questions for future phases
+### Open questions for future investigation
 
-- **Combined stress test**: pRetrieveMax=0.3 + cap=50k + short sessions — cumulative pressure from both retrieval dimensions simultaneously.
-- **Crossover shift**: How does the ~89 cycle crossover shift under different compression ratios or tool result sizes?
-- **Latency modelling**: Can compaction frequency trade-offs be evaluated when wall-clock time matters?
+- **Latency modelling**: When wall-clock time matters, compaction frequency trade-offs may flip. Would require engine changes.
+- **Crossover shift under combined conditions**: The ~89-cycle crossover may shift under elevated pRetrieveMax + small cap + high compression simultaneously.
+- **Retrieval degradation model**: A more realistic model where pRetrieve degrades with store age/size would stress-test the recommendation further.
 
 ---
 
@@ -250,3 +258,4 @@ Incremental cost is constant (cap-insensitive by design).
 | 008 | #74 | incrementalInterval sensitivity | done | 15k "cheapest" is a model artefact; 30k default recommended; engine: NumericValuesRange |
 | 009 | #86 | pRetrieveMax sensitivity | done | lcm-subagent wins structurally (cache, not retrieval); robust at ≥150 cycles; thin margin at 100 cycles |
 | 010 | #88 | compressedTokensCap sensitivity | done | Secondary lever (3.4% swing vs 25× cap range); default 100k well-positioned; ≥150 cycles cap-insensitive |
+| — | #90 | Phase 2 synthesis | done | Cross-experiment conclusions updated; implementation parameters documented |
