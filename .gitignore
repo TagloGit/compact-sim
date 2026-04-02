@@ -22,4 +22,5 @@ experiments/data/
 
 # Ephemeral loop control files
 experiments/FEEDBACK.md
+experiments/HANDOFF.md
 experiments/PAUSE

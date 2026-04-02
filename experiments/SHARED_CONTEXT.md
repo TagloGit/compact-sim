@@ -149,6 +149,27 @@ When you see a `## Feedback from Tim` section at the end of your prompt:
 3. **Act on it** — adjust your plans, update issues, or change direction as requested
 4. **Delete the file** — run `rm experiments/FEEDBACK.md` so it doesn't repeat next iteration
 
+## Handoff messages between iterations
+
+Each iteration is a fresh session — you cannot talk to the next iteration directly. To pass a message, write to `experiments/HANDOFF.md`. The loop harness will inject its contents into the next iteration's prompt, just like Tim's feedback file.
+
+Use this when the next iteration needs specific direction that isn't captured in the issue backlog alone. For example:
+- "Pick up #112 before anything else — it's a blocking CI issue"
+- "I started the analysis but ran out of context — the branch is `experiment/015-foo`, continue from there"
+- "Re-run experiment 012 with the updated engine before starting new work"
+
+**Writing a handoff message:**
+
+```bash
+cat > experiments/HANDOFF.md << 'EOF'
+Your message here. Be specific about what the next iteration should do and why.
+EOF
+```
+
+**Reading a handoff message:** If you see a `## Handoff from previous iteration` section at the end of your prompt, that takes priority over normal backlog selection. After reading, delete the file (`rm experiments/HANDOFF.md`) so it doesn't repeat.
+
+The loop also automatically injects the previous iteration's summary block (if one was produced), so you always have basic context about what just happened — even without an explicit handoff message.
+
 ## Constraints
 
 - Focus on experiments, analysis, findings, and engine improvements when needed
