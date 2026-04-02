@@ -71,6 +71,7 @@ gh issue view <number> -R TagloGit/compact-sim
 - Branch naming: `experiment/NNN-short-title` (e.g. `experiment/003-cache-sensitivity`)
 - PR description includes `Closes #N` to auto-close the issue on merge
 - **Merge your own PRs** (squash merge to main) and set the issue label to `status: done`. Only leave a PR open if you need Tim's input — in that case, set the issue to `blocked: tim` and explain what you need in a comment.
+- **Wait for CI before merging** — always check that CI checks have passed before merging a PR. Use `gh pr checks <number> -R TagloGit/compact-sim` to verify. Do not merge while checks are still running.
 
 ## Findings (`experiments/FINDINGS.md`)
 

@@ -105,11 +105,25 @@ extract_summary() {
 
 # Extract the handoff signal from result text.
 # Returns: professor, student, BLOCKED, or REVIEW
+# Uses Node instead of grep -P for Windows/Git Bash compatibility.
 extract_handoff() {
   local result="$1"
-  # Look for **Next:** line in the Handoff block
-  local next=$(echo "$result" | grep -oP '\*\*Next:\*\*\s*\K\S+' | tail -1)
-  echo "$next"
+  echo "$result" | node -e "
+const lines = require('fs').readFileSync('/dev/stdin', 'utf-8').split('\n');
+let inHandoff = false;
+let next = '';
+for (const line of lines) {
+  if (line.trim() === '## Handoff') { inHandoff = true; continue; }
+  if (inHandoff && line.match(/\*\*Next:\*\*/)) {
+    const m = line.match(/\*\*Next:\*\*\s*(\S+)/);
+    if (m) next = m[1];
+    break;
+  }
+  // Stop if we hit another heading after Handoff
+  if (inHandoff && line.startsWith('## ')) break;
+}
+process.stdout.write(next);
+"
 }
 
 # Print cost/turns/duration from the result event.
@@ -135,8 +149,12 @@ for (const line of lines) {
 
 # --- Main loop ---
 
+DEBUG_LOG="experiments/data/loop-debug.log"
+echo "=== Research loop started $(date -Iseconds) ===" > "$DEBUG_LOG"
+
 echo "Starting research loop: $MAX_ITERATIONS iterations"
 echo "Starting persona: $PERSONA"
+echo "Debug log: $DEBUG_LOG"
 echo "To pause: touch experiments/PAUSE"
 echo ""
 
@@ -173,6 +191,11 @@ while [ $iteration -lt $MAX_ITERATIONS ]; do
   # Extract result text from session file
   result=$(extract_result "$session_file")
 
+  # Save result text and debug info
+  echo "--- Iteration $iteration [$PERSONA] $(date -Iseconds) ---" >> "$DEBUG_LOG"
+  echo "$result" > "experiments/data/session-${iteration}-result.txt"
+  echo "Result text saved to: experiments/data/session-${iteration}-result.txt" >> "$DEBUG_LOG"
+
   echo ""
   echo "--- Iteration $iteration [$PERSONA] complete ---"
 
@@ -191,6 +214,12 @@ while [ $iteration -lt $MAX_ITERATIONS ]; do
 
   # Extract handoff signal
   handoff=$(extract_handoff "$result")
+  echo "Handoff extracted: '$handoff'" >> "$DEBUG_LOG"
+
+  # Log the last 20 lines of result for debugging handoff issues
+  echo "--- Last 20 lines of result ---" >> "$DEBUG_LOG"
+  echo "$result" | tail -20 >> "$DEBUG_LOG"
+  echo "--- end ---" >> "$DEBUG_LOG"
 
   case "$handoff" in
     professor)
