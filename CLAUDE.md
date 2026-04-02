@@ -74,6 +74,18 @@ The simulation models compaction strategies for LLM agent conversations:
 - **Conversation shape** — tool-heavy vs conversation-heavy, result sizes, call frequency
 - **External store** — lossless strategies store originals externally, enabling probabilistic retrieval at a cost
 
+## Ralph loop (autonomous research agent)
+
+The `experiments/` directory contains an autonomous research harness called the "Ralph loop". A bash script (`experiments/run-loop.sh`) repeatedly invokes Claude Code non-interactively via `claude -p`, feeding it a persistent prompt (`experiments/AGENT_PROMPT.md`) each iteration. The agent (nicknamed "ralph") runs experiments using the CLI (`npm run cli:sim` / `cli:sweep`), writes up findings in `experiments/journal/NNN-*.md`, and commits results — all without human intervention.
+
+Key files:
+- **`experiments/run-loop.sh`** — loop script. Flags: `-v` (verbose), `-p <prompt>` (custom prompt). Positional arg sets max iterations (default 20). Supports `PAUSE` file for graceful stop, and detects `BLOCKED` / `RESEARCH_COMPLETE` signals from the agent.
+- **`experiments/AGENT_PROMPT.md`** — the prompt fed to each iteration. Defines the agent's objective, available CLI tools, and experiment workflow.
+- **`experiments/RESEARCH_PLAN.md`** — current research agenda the agent reads and updates each iteration.
+- **`experiments/EXPERIMENT_LOG.md`** — index of all experiments and key findings.
+- **`experiments/journal/`** — per-experiment write-ups (hypothesis, method, results, conclusions).
+- **`experiments/data/`** — raw simulation outputs and session logs per experiment.
+
 ## Conventions
 
 - `/code-review <pr>` — PR code review
