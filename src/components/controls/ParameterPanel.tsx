@@ -374,6 +374,7 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
             {slider('contextWindow')}
             {slider('compactionThreshold')}
             {slider('compressionRatio')}
+            {numberInput('cacheReliability')}
           </div>
         </CollapsibleContent>
       </Collapsible>

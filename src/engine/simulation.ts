@@ -247,11 +247,28 @@ export function calculateCache(
     return state
   }
 
-  const cache = prefixCacheModel.calculate(
+  let cache = prefixCacheModel.calculate(
     state.previousContext,
     state.context,
     config,
   )
+
+  // Probabilistic cache degradation: on each LLM call step, even if the
+  // prefix is stable, there's a (1 - cacheReliability) chance of a full miss.
+  // At the default cacheReliability=1.0 this branch is never entered and the
+  // RNG sequence is unchanged, preserving backwards compatibility.
+  if (config.cacheReliability < 1.0 && cache.cacheHitTokens > 0) {
+    const roll = state.rng()
+    if (roll >= config.cacheReliability) {
+      cache = {
+        cachedPrefixTokens: 0,
+        cacheHitTokens: 0,
+        cacheWriteTokens: cache.cacheWriteTokens,
+        uncachedTokens: cache.cacheHitTokens + cache.uncachedTokens,
+        hitRate: 0,
+      }
+    }
+  }
 
   return {
     ...state,

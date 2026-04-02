@@ -217,6 +217,22 @@ export const PARAM_META: ParamMetaRegistry = {
     defaultSweepScale: 'linear',
   },
 
+  // Cache reliability
+  cacheReliability: {
+    paramKind: 'numeric',
+    displayName: 'Cache reliability',
+    group: 'context-compaction',
+    isConversationShape: false,
+    uiMin: 0,
+    uiMax: 1,
+    uiStep: 0.01,
+    displayMultiplier: 1,
+    defaultSweepMin: 0.5,
+    defaultSweepMax: 1.0,
+    defaultSweepSteps: 6,
+    defaultSweepScale: 'linear',
+  },
+
   // Strategy 2 — Incremental compaction
   incrementalInterval: {
     paramKind: 'numeric',

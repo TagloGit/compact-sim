@@ -52,6 +52,9 @@ export interface SimulationConfig {
   readonly lcmGrepRatio: number
   readonly lcmGrepResponseTokens: number
 
+  // Cache reliability
+  readonly cacheReliability: number
+
   // Pricing (per token, not per million)
   readonly baseInputPrice: number
   readonly outputPrice: number
@@ -147,6 +150,9 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   contextWindow: 200_000,
   compactionThreshold: 0.85,
   compressionRatio: 10,
+
+  // Cache reliability
+  cacheReliability: 1.0,
 
   // Pricing (per token)
   baseInputPrice: 5.0 / 1_000_000,
