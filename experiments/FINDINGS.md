@@ -257,11 +257,53 @@ full-compaction costs 2.5–3x more than lcm-subagent at rel=0.7.
 
 ---
 
+## Tool-Result Compression Sensitivity (Exp 012)
+
+Sweep over `toolCompressionRatio` [2, 3, 5, 8] (enabled) vs no compression, all 6 strategies × `toolCallCycles` [100, 150, 200], calibrated baseline.
+
+### Cost reduction (%) vs no compression at 200 cycles
+
+| Strategy | r=2 | r=3 | r=5 | r=8 |
+|---|---|---|---|---|
+| full-compaction | **-2.3%** | **-4.9%** | **-4.7%** | **-1.8%** |
+| incremental | 5.6% | 8.2% | 9.1% | 9.4% |
+| lossless-append | 5.7% | 8.5% | 9.4% | 9.8% |
+| lossless-hierarchical | 4.6% | 7.3% | 7.7% | 7.9% |
+| lossless-tool-results | 6.5% | 9.3% | 10.4% | 10.8% |
+| lcm-subagent | 3.1% | 5.2% | 5.3% | 5.1% |
+
+### Strategy rankings (200 cycles) — stable at all ratios
+
+lcm-subagent is #1 at every compression ratio. full-compaction remains last (and gets *worse* with compression at 200 cycles).
+
+### lcm-subagent vs incremental gap narrows
+
+| Cycles | No compression | r=3 | r=8 |
+|---|---|---|---|
+| 100 | +$0.028 (lcm wins) | -$0.004 (inc wins) | -$0.019 (inc wins) |
+| 150 | +$0.343 | +$0.155 | +$0.113 |
+| 200 | +$0.937 | +$0.541 | +$0.401 |
+
+At 100 cycles with ratio≥3, incremental becomes marginally cheaper (<$0.02). Gap remains solidly positive at 150+ cycles.
+
+### Compaction events drop from 7 to 5 (200 cycles, incremental-family strategies)
+
+Slower context growth reduces compaction frequency. full-compaction stops compacting entirely at ratio≥5.
+
+**Key findings:**
+1. **Tool compression is a secondary optimisation (3–10% savings), not transformative.** The >15% hypothesis was rejected.
+2. **lcm-subagent benefits least** (3–5% at 200 cycles) because it already maintains the smallest context. Diminishing returns beyond ratio=3.
+3. **full-compaction gets worse** at 200 cycles — a threshold-trigger artefact. Compression slows context growth, delaying or preventing the single compaction event, resulting in more steps at high context size.
+4. **Ratio=3 captures nearly all the benefit** and is achievable with structured extraction (no LLM needed). Practical sweet spot.
+5. **Strategy rankings unchanged.** Tool compression is orthogonal to strategy choice — it helps all strategies proportionally (except full-compaction).
+
+---
+
 ## Cross-Experiment Conclusions
 
 ### Strategy recommendation for Models Agent
 
-**Use `lcm-subagent` unconditionally.** Across 10 experiments spanning Phase 1 (baselines and parameter sweeps) and Phase 2 (retrieval stress tests), lcm-subagent is the cheapest strategy in every realistic scenario.
+**Use `lcm-subagent` unconditionally.** Across 12 experiments spanning Phase 1 (baselines and parameter sweeps), Phase 2 (retrieval stress tests), and Phase 3 (cache and ingestion), lcm-subagent is the cheapest strategy in every realistic scenario.
 
 | Session length | Strategy | Cost advantage over next-best | Confidence |
 |---|---|---|---|
@@ -281,6 +323,8 @@ full-compaction costs 2.5–3x more than lcm-subagent at rel=0.7.
 | `incrementalInterval` | 30,000 (default) | 15k appears cheapest but is a modelling artefact; 30k avoids over-summarisation risk |
 | `pRetrieveMax` | 0.2 (default) | Well within safe zone; recommendation flips only at 0.27–0.77 depending on session length |
 | `compressedTokensCap` | 100,000 (default) | Secondary lever; 25× variation → 3.4% cost swing; default well-positioned |
+| `toolCompressionEnabled` | true (if practical) | 3–5% savings for lcm-subagent; secondary optimisation |
+| `toolCompressionRatio` | 3 | Sweet spot: captures nearly all benefit without requiring LLM summarisation |
 
 ### Modelling limitations (do not over-interpret)
 
@@ -291,6 +335,7 @@ full-compaction costs 2.5–3x more than lcm-subagent at rel=0.7.
 5. **Cache model at default is optimistic** (#93, investigated in Exp 011): The `cacheReliability` parameter now allows probabilistic cache degradation. At rel=1.0 (default), absolute costs are optimistic. Exp 011 confirmed that unreliable caching **widens** lcm-subagent's advantage (from 0.5–8.2% to 3–17% over incremental) and eliminates the ~89-cycle crossover. Strategy *rankings* are robust; absolute *cost estimates* from prior experiments should be treated as lower bounds. A realistic production value of rel=0.8–0.9 increases costs 30–100%.
 6. **Reasoning output uncalibrated** (#94): `reasoningOutputSize` defaults to 500 tokens; analysis of 127 Models Agent JSON conversations shows mean=265, and only 47% of turns include thinking. The sim overcharges reasoning ~3-4x. Affects absolute costs (all strategies equally), not rankings.
 7. **Summary convergence ceiling** (#95): At ratio=10 with 30k interval, summary converges to ~3.3k tokens (`interval / (ratio - 1)`) within 2-3 compactions. For 200-cycle sessions compressing 100k+ of history, a fixed 3.3k summary is likely insufficient. The sim has no mechanism for summary quality degradation or growth over time.
+8. **Tool compression is free in the model** (#103, Exp 012): `toolCompressionEnabled` reduces tool result tokens at ingestion with no processing cost. In practice, ratio≥5 requires LLM summarisation with its own API cost. The sim's 3–5% savings for lcm-subagent at ratio=3+ may be partially offset by compression costs. Ratio=3 is achievable with structured extraction (no LLM), making it the practical recommendation.
 
 ### Cost structure insight (post-Phase 2 review)
 
@@ -326,7 +371,8 @@ Thinking/assistant ratio: 3.0x (vs implied 3.8x at defaults). Heavy-tailed distr
 - **Cache reliability × incrementalInterval interaction**: At shorter intervals, more compaction events create more cache invalidation — but each invalidation affects a smaller context. May shift the "30k is safest" recommendation.
 - **Reasoning frequency impact** (#94): Does modelling reasoning on only 47% of turns shift any strategy rankings, or just absolute costs?
 - **Summary growth models** (#95): Does allowing summary size to grow sublinearly over long sessions change the balance between in-context retention vs retrieval?
-- **Tool-result compression at ingestion** (#103): The sim already has `toolCompressionEnabled`/`toolCompressionRatio` parameters but these were not explored in Phase 1-2. Tool results are the dominant cost driver — orthogonal compression before context accumulation could shift the entire cost picture. **Next up for investigation (Exp 012).**
+- **Cost of tool compression itself**: Exp 012 treats compression as free. In practice, LLM-based summarisation at ratio≥5 has its own API cost. A more realistic model would add a per-result compression cost, which could erode or eliminate the 5% savings at high ratios.
+- **Selective tool compression**: Compressing only large tool results (>500 tokens) while leaving small ones intact might be more practical and still capture most benefit.
 - **Latency modelling**: When wall-clock time matters, compaction frequency trade-offs may flip. Would require engine changes.
 - **Crossover shift under combined conditions**: The ~89-cycle crossover may shift under elevated pRetrieveMax + small cap + high compression simultaneously.
 - **Compaction cost should vary with method**: At 1.1x compression, programmatic (free) methods may suffice; at 10x, LLM synthesis is needed. The sim charges the same rate regardless.
@@ -349,4 +395,4 @@ Thinking/assistant ratio: 3.0x (vs implied 3.8x at defaults). Heavy-tailed distr
 | 010 | #88 | compressedTokensCap sensitivity | done | Secondary lever (3.4% swing vs 25× cap range); default 100k well-positioned; ≥150 cycles cap-insensitive |
 | — | #90 | Phase 2 synthesis | done | Cross-experiment conclusions updated; implementation parameters documented |
 | 011 | #98 | Cache reliability sensitivity | done | Rankings stable; lcm advantage widens (3–17% vs 0.5–8.2%); ~89-cycle crossover disappears at rel<=0.9 |
-| 012 | #103 | Tool-result compression sensitivity | backlog | — |
+| 012 | #103 | Tool-result compression sensitivity | done | Secondary lever (3–10% savings); ratio=3 sweet spot; rankings stable; full-compaction worse |
