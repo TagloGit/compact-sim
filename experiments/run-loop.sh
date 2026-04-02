@@ -26,6 +26,8 @@ VERBOSE=false
 PERSONA="professor"
 SHARED_CONTEXT="experiments/SHARED_CONTEXT.md"
 FEEDBACK_FILE="experiments/FEEDBACK.md"
+HANDOFF_FILE="experiments/HANDOFF.md"
+PREV_SUMMARY=""
 
 while [[ "$1" == -* ]]; do
   case "$1" in
@@ -84,6 +86,28 @@ build_prompt() {
     echo "Tim has left the following feedback. Read it carefully, acknowledge it in your response, and act on it. After reading, delete the file (\`rm experiments/FEEDBACK.md\`) so it is not repeated in the next iteration."
     echo ""
     cat "$FEEDBACK_FILE"
+  fi
+
+  # Inject handoff message from previous iteration if the file exists and is non-empty
+  if [ -s "$HANDOFF_FILE" ]; then
+    echo ""
+    echo "---"
+    echo ""
+    echo "## Handoff from previous iteration"
+    echo ""
+    echo "The previous iteration left the following handoff message for you. This takes priority over normal backlog selection. After reading, delete the file (\`rm experiments/HANDOFF.md\`) so it is not repeated in the next iteration."
+    echo ""
+    cat "$HANDOFF_FILE"
+  fi
+
+  # Inject previous iteration's summary if available
+  if [ -n "$PREV_SUMMARY" ]; then
+    echo ""
+    echo "---"
+    echo ""
+    echo "## Previous iteration summary"
+    echo ""
+    echo "$PREV_SUMMARY"
   fi
 }
 
@@ -232,6 +256,9 @@ while [ $iteration -lt $MAX_ITERATIONS ]; do
   extract_cost "$session_file"
   echo "--- Session: $session_file ---"
   echo ""
+
+  # Capture summary for injection into next iteration
+  PREV_SUMMARY="$summary"
 
   # Extract handoff signal
   handoff=$(extract_handoff "$result")
