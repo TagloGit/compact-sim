@@ -664,6 +664,62 @@ describe('runSimulation', () => {
     })
   })
 
+  describe('cacheReliability', () => {
+    const baseConfig: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      toolCallCycles: 10,
+      toolCallSize: 200,
+      toolResultSize: 2_000,
+      assistantMessageSize: 300,
+      reasoningOutputSize: 0,
+      userMessageFrequency: 100,
+      userMessageSize: 200,
+      systemPromptSize: 4_000,
+      contextWindow: 200_000,
+      compactionThreshold: 0.99,
+      compressionRatio: 10,
+    }
+
+    it('cacheReliability=1.0 produces identical results to omitting it', () => {
+      const result = run({ ...baseConfig, cacheReliability: 1.0 })
+      const resultDefault = run(baseConfig)
+      expect(result.summary.totalCost).toBe(resultDefault.summary.totalCost)
+      expect(result.summary.averageCacheHitRate).toBe(resultDefault.summary.averageCacheHitRate)
+    })
+
+    it('cacheReliability=0.0 produces zero cache hits', () => {
+      const result = run({ ...baseConfig, cacheReliability: 0.0 })
+      const llmSteps = result.snapshots.filter(
+        (s) => s.message.type === 'assistant' || s.message.type === 'reasoning',
+      )
+      // After the first LLM step (which has no previous context), all should have 0 hits
+      for (let i = 1; i < llmSteps.length; i++) {
+        expect(llmSteps[i].cache.cacheHitTokens).toBe(0)
+      }
+      expect(result.summary.averageCacheHitRate).toBe(0)
+    })
+
+    it('lower cacheReliability produces higher total cost', () => {
+      const perfectCache = run({ ...baseConfig, cacheReliability: 1.0 })
+      const degradedCache = run({ ...baseConfig, cacheReliability: 0.5 })
+      expect(degradedCache.summary.totalCost).toBeGreaterThan(perfectCache.summary.totalCost)
+    })
+
+    it('lower cacheReliability produces lower average cache hit rate', () => {
+      const perfectCache = run({ ...baseConfig, cacheReliability: 1.0 })
+      const degradedCache = run({ ...baseConfig, cacheReliability: 0.5 })
+      expect(degradedCache.summary.averageCacheHitRate).toBeLessThan(
+        perfectCache.summary.averageCacheHitRate,
+      )
+    })
+
+    it('results are deterministic for the same cacheReliability value', () => {
+      const result1 = run({ ...baseConfig, cacheReliability: 0.7 })
+      const result2 = run({ ...baseConfig, cacheReliability: 0.7 })
+      expect(result1.summary.totalCost).toBe(result2.summary.totalCost)
+    })
+  })
+
   describe('runSimulationWithConversation', () => {
     it('produces identical results to runSimulation for the same config', () => {
       const config: SimulationConfig = {
