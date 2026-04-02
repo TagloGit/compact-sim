@@ -326,7 +326,7 @@ Thinking/assistant ratio: 3.0x (vs implied 3.8x at defaults). Heavy-tailed distr
 - **Cache reliability × incrementalInterval interaction**: At shorter intervals, more compaction events create more cache invalidation — but each invalidation affects a smaller context. May shift the "30k is safest" recommendation.
 - **Reasoning frequency impact** (#94): Does modelling reasoning on only 47% of turns shift any strategy rankings, or just absolute costs?
 - **Summary growth models** (#95): Does allowing summary size to grow sublinearly over long sessions change the balance between in-context retention vs retrieval?
-- **Tool-result compression at ingestion**: The sim already has `toolCompressionEnabled`/`toolCompressionRatio` parameters but these were not explored in Phase 1-2. Tool results are the dominant cost driver — orthogonal compression before context accumulation could shift the entire cost picture.
+- **Tool-result compression at ingestion** (#103): The sim already has `toolCompressionEnabled`/`toolCompressionRatio` parameters but these were not explored in Phase 1-2. Tool results are the dominant cost driver — orthogonal compression before context accumulation could shift the entire cost picture. **Next up for investigation (Exp 012).**
 - **Latency modelling**: When wall-clock time matters, compaction frequency trade-offs may flip. Would require engine changes.
 - **Crossover shift under combined conditions**: The ~89-cycle crossover may shift under elevated pRetrieveMax + small cap + high compression simultaneously.
 - **Compaction cost should vary with method**: At 1.1x compression, programmatic (free) methods may suffice; at 10x, LLM synthesis is needed. The sim charges the same rate regardless.
@@ -349,3 +349,4 @@ Thinking/assistant ratio: 3.0x (vs implied 3.8x at defaults). Heavy-tailed distr
 | 010 | #88 | compressedTokensCap sensitivity | done | Secondary lever (3.4% swing vs 25× cap range); default 100k well-positioned; ≥150 cycles cap-insensitive |
 | — | #90 | Phase 2 synthesis | done | Cross-experiment conclusions updated; implementation parameters documented |
 | 011 | #98 | Cache reliability sensitivity | done | Rankings stable; lcm advantage widens (3–17% vs 0.5–8.2%); ~89-cycle crossover disappears at rel<=0.9 |
+| 012 | #103 | Tool-result compression sensitivity | backlog | — |
