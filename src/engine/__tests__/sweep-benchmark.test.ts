@@ -63,7 +63,12 @@ function buildSweepForSize(targetCount: number): SweepConfig {
     },
   }
 
-  return { ...base, ...swept } as SweepConfig
+  // Pin toolCallCycles to 100 so benchmark time doesn't depend on DEFAULT_CONFIG
+  return {
+    ...base,
+    ...swept,
+    toolCallCycles: { kind: 'fixed' as const, value: 100 },
+  } as SweepConfig
 }
 
 /** Build a sweep config with shape params swept to test conversation generation cost */
