@@ -379,6 +379,19 @@ Thinking/assistant ratio: 3.0x (vs implied 3.8x at defaults). Heavy-tailed distr
 
 ---
 
+## Programme Status (2026-04-02)
+
+**12 experiments complete across 3 phases.** The core research question — which compaction strategy to use for the Models Agent — is answered with high confidence. lcm-subagent wins unconditionally in every tested scenario. No single-parameter perturbation shifts the ranking.
+
+**Remaining backlog (3 issues, all model fidelity):**
+- **#95 (Summary growth model)** — highest priority; only credible theoretical threat to the recommendation, though most likely reinforces it
+- **#94 (Reasoning calibration)** — medium; improves absolute cost accuracy, cannot change rankings
+- **#96 (Update defaults)** — low; UX cleanup, not research
+
+**Decision point for Tim:** Continue with model fidelity improvements, or treat the programme as substantially complete and move to implementing lcm-subagent in the Models Agent?
+
+---
+
 ## Experiment Index
 
 | Exp | Issue | Description | Status | Key finding |
