@@ -383,12 +383,12 @@ Thinking/assistant ratio: 3.0x (vs implied 3.8x at defaults). Heavy-tailed distr
 
 **12 experiments complete across 3 phases.** The core research question — which compaction strategy to use for the Models Agent — is answered with high confidence. lcm-subagent wins unconditionally in every tested scenario. No single-parameter perturbation shifts the ranking.
 
-**Remaining backlog (3 issues, all model fidelity):**
-- **#95 (Summary growth model)** — highest priority; only credible theoretical threat to the recommendation, though most likely reinforces it
-- **#94 (Reasoning calibration)** — medium; improves absolute cost accuracy, cannot change rankings
-- **#96 (Update defaults)** — low; UX cleanup, not research
+**Phase 4 pivot (Tim direction, 2026-04-02):** The research focus shifts from *which strategy* to *how to implement lcm-subagent*. The guiding question: "What can we simulate to inform the real-world implementation?" This includes implementation variants, optimal configuration, context quality modelling, and summary growth dynamics. See #108 for the full Phase 4 epic.
 
-**Decision point for Tim:** Continue with model fidelity improvements, or treat the programme as substantially complete and move to implementing lcm-subagent in the Models Agent?
+**Wrap-up backlog (complete before Phase 4 experiments):**
+- **#96 (Update defaults)** — HIGH priority; Tim needs calibrated UI defaults
+- **#95 (Summary growth model)** — MEDIUM; engine change that enables Phase 4 context quality work
+- **#94 (Reasoning calibration)** — MEDIUM; model fidelity improvement
 
 ---
 
