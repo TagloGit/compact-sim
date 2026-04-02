@@ -235,12 +235,47 @@ Incremental cost is constant (cap-insensitive by design).
 2. **Compaction frequency**: No latency or quality-degradation cost for over-compaction — model always prefers shorter intervals. Real compaction has latency overhead.
 3. **Retrieval quality**: `pRetrieveMax` is fixed and doesn't degrade with store size. Exp 009 showed the recommendation remains robust unless average retrieval rates are implausibly high (>30–80% of steps).
 4. **Conversation determinism**: Simulated conversations are deterministic averages. Real conversations have higher variance in tool result sizes and cycle counts.
+5. **Cache model is unrealistically optimistic** (#93): The prefix cache model is perfectly deterministic — stable prefix = guaranteed hit. Real API caching is erratic (sporadic misses, warm-up delays, partial hits). Cost breakdown analysis shows cached input dominates total cost (77% for full-compaction, 51% for lcm-subagent), so cache model fidelity directly affects absolute cost numbers. Unreliable caching likely *widens* the gap against large-context strategies (a miss at 170k costs 10x more than at 27k).
+6. **Reasoning output uncalibrated** (#94): `reasoningOutputSize` defaults to 500 tokens; analysis of 127 Models Agent JSON conversations shows mean=265, and only 47% of turns include thinking. The sim overcharges reasoning ~3-4x. Affects absolute costs (all strategies equally), not rankings.
+7. **Summary convergence ceiling** (#95): At ratio=10 with 30k interval, summary converges to ~3.3k tokens (`interval / (ratio - 1)`) within 2-3 compactions. For 200-cycle sessions compressing 100k+ of history, a fixed 3.3k summary is likely insufficient. The sim has no mechanism for summary quality degradation or growth over time.
+
+### Cost structure insight (post-Phase 2 review)
+
+Cost breakdown at calibrated baseline (200 cycles) reveals **why** full-compaction loses:
+
+| Component | full-compaction | lcm-subagent |
+|---|---|---|
+| Cached input | $16.01 (77%) | $5.35 (51%) |
+| Output | $3.15 (15%) | $3.15 (30%) |
+| Cache write | $0.73 (4%) | $0.65 (6%) |
+| Uncached input | $0.63 (3%) | $0.72 (7%) |
+| Compaction | $0.19 (1%) | $0.28 (3%) |
+| Retrieval | $0.00 (0%) | $0.35 (3%) |
+| **Total** | **$20.71** | **$10.49** |
+
+The entire difference is **cached input volume**: average context 80k vs 27k. Even at 90% cache discount, sending 80k cached tokens per turn costs far more than 27k. Compaction and retrieval costs are noise (< 4% combined). **The cheapest strategy is the one that keeps context smallest.**
+
+### Reasoning calibration data (from JSON conversation logs)
+
+Source: 127 conversations at `%APPDATA%/models-ai-agent/conversations/`. 15 had reasoning enabled.
+
+| Parameter | Calibrated value | Current default | Source |
+|---|---|---|---|
+| `reasoningOutputSize` | 265 (mean) | 500 | 143 thinking blocks across 15 conversations |
+| reasoning frequency | 47% of turns | 100% (implicit) | Not yet modelled — no parameter exists |
+| `assistantMessageSize` (reasoning-on) | 87 (mean) | 130 | 303 assistant turns in reasoning-on conversations |
+
+Thinking/assistant ratio: 3.0x (vs implied 3.8x at defaults). Heavy-tailed distribution: P90=566.
 
 ### Open questions for future investigation
 
+- **Cache reliability sensitivity** (#93): How do findings change when cache hits are probabilistic rather than guaranteed? Likely amplifies the "keep context small" conclusion but needs quantification.
+- **Reasoning frequency impact** (#94): Does modelling reasoning on only 47% of turns shift any strategy rankings, or just absolute costs?
+- **Summary growth models** (#95): Does allowing summary size to grow sublinearly over long sessions change the balance between in-context retention vs retrieval?
+- **Tool-result compression at ingestion**: The sim already has `toolCompressionEnabled`/`toolCompressionRatio` parameters but these were not explored in Phase 1-2. Tool results are the dominant cost driver — orthogonal compression before context accumulation could shift the entire cost picture.
 - **Latency modelling**: When wall-clock time matters, compaction frequency trade-offs may flip. Would require engine changes.
 - **Crossover shift under combined conditions**: The ~89-cycle crossover may shift under elevated pRetrieveMax + small cap + high compression simultaneously.
-- **Retrieval degradation model**: A more realistic model where pRetrieve degrades with store age/size would stress-test the recommendation further.
+- **Compaction cost should vary with method**: At 1.1x compression, programmatic (free) methods may suffice; at 10x, LLM synthesis is needed. The sim charges the same rate regardless.
 
 ---
 
