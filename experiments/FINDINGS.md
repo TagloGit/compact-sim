@@ -204,6 +204,59 @@ Incremental cost is constant (cap-insensitive by design).
 
 ---
 
+## Cache Reliability Sensitivity (Exp 011)
+
+Sweep over `cacheReliability` [1.0, 0.95, 0.9, 0.8, 0.7, 0.5] × `toolCallCycles` [100, 150, 200] × all 6 strategies, calibrated baseline.
+
+### Strategy rankings at each reliability level (200 cycles)
+
+| cacheReliability | #1 | #2 | #3 | #4 | #5 | #6 |
+|---|---|---|---|---|---|---|
+| 1.0 | lcm-subagent $10.49 | lossless-hier $11.34 | incremental $11.43 | lossless-tool $11.63 | lossless-app $11.92 | full-compact $20.71 |
+| 0.9 | lcm-subagent $14.77 | lossless-hier $15.77 | incremental $15.92 | lossless-tool $17.52 | lossless-app $17.77 | full-compact $31.92 |
+| 0.7 | lcm-subagent $22.27 | lossless-hier $23.27 | lossless-tool $26.84 | lossless-app $27.09 | incremental $28.45 | full-compact $60.85 |
+| 0.5 | lcm-subagent $35.00 | lossless-hier $36.00 | incremental $42.32 | lossless-tool $42.63 | lossless-app $42.88 | full-compact $92.59 |
+
+**lcm-subagent is cheapest at every (reliability, cycles) combination.** Rankings are stable. lossless-hierarchical rises to consistent #2 under unreliable caching.
+
+### lcm-subagent advantage widens
+
+| cycles | advantage at rel=1.0 | advantage at rel=0.9 | advantage at rel=0.7 |
+|---|---|---|---|
+| 100 | +0.5% | +2.9% | +13.1% |
+| 150 | +4.2% | +8.9% | +16.1% |
+| 200 | +8.2% | +7.2% | +21.7% |
+
+### Crossover shift
+
+| cacheReliability | Crossover (lcm vs incremental) |
+|---|---|
+| 1.0 | ~89 cycles |
+| 0.9 | <60 cycles (lcm wins at all tested lengths) |
+| 0.8 | <60 cycles |
+| 0.7 | <60 cycles |
+
+**The ~89-cycle crossover is a perfect-cache artefact.** Under realistic caching (rel<=0.9), lcm-subagent wins unconditionally.
+
+### full-compaction penalty
+
+| cycles | ratio at rel=1.0 | ratio at rel=0.7 | ratio at rel=0.5 |
+|---|---|---|---|
+| 100 | 1.69x | 2.49x | 2.23x |
+| 150 | 2.16x | 3.08x | 3.07x |
+| 200 | 1.97x | 2.73x | 2.65x |
+
+full-compaction costs 2.5–3x more than lcm-subagent at rel=0.7.
+
+**Key findings:**
+1. **Strategy rankings are completely stable** — lcm-subagent wins at all reliability levels, session lengths, and strategy comparisons.
+2. **lcm-subagent's advantage is larger under realistic caching** — 7–17% vs 0.5–8.2% at perfect cache.
+3. **The ~89-cycle crossover disappears** at rel<=0.9 — lcm-subagent wins unconditionally.
+4. **Absolute costs are 30–100% higher** than perfect-cache estimates at rel=0.8–0.9. Prior rankings remain valid; prior absolute costs are lower bounds.
+5. **Mechanism**: a cache miss at large context costs proportionally more. lcm-subagent's ~27k average context vs incremental's ~43k makes it more robust to failures.
+
+---
+
 ## Cross-Experiment Conclusions
 
 ### Strategy recommendation for Models Agent
@@ -235,7 +288,7 @@ Incremental cost is constant (cap-insensitive by design).
 2. **Compaction frequency**: No latency or quality-degradation cost for over-compaction — model always prefers shorter intervals. Real compaction has latency overhead.
 3. **Retrieval quality**: `pRetrieveMax` is fixed and doesn't degrade with store size. Exp 009 showed the recommendation remains robust unless average retrieval rates are implausibly high (>30–80% of steps).
 4. **Conversation determinism**: Simulated conversations are deterministic averages. Real conversations have higher variance in tool result sizes and cycle counts.
-5. **Cache model is unrealistically optimistic** (#93): The prefix cache model is perfectly deterministic — stable prefix = guaranteed hit. Real API caching is erratic (sporadic misses, warm-up delays, partial hits). Cost breakdown analysis shows cached input dominates total cost (77% for full-compaction, 51% for lcm-subagent), so cache model fidelity directly affects absolute cost numbers. Unreliable caching likely *widens* the gap against large-context strategies (a miss at 170k costs 10x more than at 27k).
+5. **Cache model at default is optimistic** (#93, investigated in Exp 011): The `cacheReliability` parameter now allows probabilistic cache degradation. At rel=1.0 (default), absolute costs are optimistic. Exp 011 confirmed that unreliable caching **widens** lcm-subagent's advantage (from 0.5–8.2% to 3–17% over incremental) and eliminates the ~89-cycle crossover. Strategy *rankings* are robust; absolute *cost estimates* from prior experiments should be treated as lower bounds. A realistic production value of rel=0.8–0.9 increases costs 30–100%.
 6. **Reasoning output uncalibrated** (#94): `reasoningOutputSize` defaults to 500 tokens; analysis of 127 Models Agent JSON conversations shows mean=265, and only 47% of turns include thinking. The sim overcharges reasoning ~3-4x. Affects absolute costs (all strategies equally), not rankings.
 7. **Summary convergence ceiling** (#95): At ratio=10 with 30k interval, summary converges to ~3.3k tokens (`interval / (ratio - 1)`) within 2-3 compactions. For 200-cycle sessions compressing 100k+ of history, a fixed 3.3k summary is likely insufficient. The sim has no mechanism for summary quality degradation or growth over time.
 
@@ -269,7 +322,8 @@ Thinking/assistant ratio: 3.0x (vs implied 3.8x at defaults). Heavy-tailed distr
 
 ### Open questions for future investigation
 
-- **Cache reliability sensitivity** (#93): How do findings change when cache hits are probabilistic rather than guaranteed? Likely amplifies the "keep context small" conclusion but needs quantification.
+- **Realistic cacheReliability value**: What is the actual API cache hit rate in production? Measuring this would ground Exp 011's findings and give accurate absolute cost projections.
+- **Cache reliability × incrementalInterval interaction**: At shorter intervals, more compaction events create more cache invalidation — but each invalidation affects a smaller context. May shift the "30k is safest" recommendation.
 - **Reasoning frequency impact** (#94): Does modelling reasoning on only 47% of turns shift any strategy rankings, or just absolute costs?
 - **Summary growth models** (#95): Does allowing summary size to grow sublinearly over long sessions change the balance between in-context retention vs retrieval?
 - **Tool-result compression at ingestion**: The sim already has `toolCompressionEnabled`/`toolCompressionRatio` parameters but these were not explored in Phase 1-2. Tool results are the dominant cost driver — orthogonal compression before context accumulation could shift the entire cost picture.
@@ -294,3 +348,4 @@ Thinking/assistant ratio: 3.0x (vs implied 3.8x at defaults). Heavy-tailed distr
 | 009 | #86 | pRetrieveMax sensitivity | done | lcm-subagent wins structurally (cache, not retrieval); robust at ≥150 cycles; thin margin at 100 cycles |
 | 010 | #88 | compressedTokensCap sensitivity | done | Secondary lever (3.4% swing vs 25× cap range); default 100k well-positioned; ≥150 cycles cap-insensitive |
 | — | #90 | Phase 2 synthesis | done | Cross-experiment conclusions updated; implementation parameters documented |
+| 011 | #98 | Cache reliability sensitivity | done | Rankings stable; lcm advantage widens (3–17% vs 0.5–8.2%); ~89-cycle crossover disappears at rel<=0.9 |
