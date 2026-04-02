@@ -386,7 +386,7 @@ Thinking/assistant ratio: 3.0x (vs implied 3.8x at defaults). Heavy-tailed distr
 **Phase 4 pivot (Tim direction, 2026-04-02):** The research focus shifts from *which strategy* to *how to implement lcm-subagent*. The guiding question: "What can we simulate to inform the real-world implementation?" This includes implementation variants, optimal configuration, context quality modelling, and summary growth dynamics. See #108 for the full Phase 4 epic.
 
 **Wrap-up backlog (complete before Phase 4 experiments):**
-- **#96 (Update defaults)** — HIGH priority; Tim needs calibrated UI defaults
+- ~~**#96 (Update defaults)** — DONE; DEFAULT_CONFIG now uses calibrated Models Agent values~~
 - **#95 (Summary growth model)** — MEDIUM; engine change that enables Phase 4 context quality work
 - **#94 (Reasoning calibration)** — MEDIUM; model fidelity improvement
 
