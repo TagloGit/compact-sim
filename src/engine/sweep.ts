@@ -40,7 +40,7 @@ export function expandParamValues(key: keyof SimulationConfig, def: SweepParamet
     return (def as StrategySweepRange).values
   }
   if (meta.paramKind === 'enum') {
-    return (def as { values: readonly string[] }).values
+    return [...(def as { values: readonly string[] }).values]
   }
   if (meta.paramKind === 'boolean') {
     return [false, true]

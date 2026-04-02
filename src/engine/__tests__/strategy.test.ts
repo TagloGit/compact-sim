@@ -33,7 +33,7 @@ describe('strategy1', () => {
       makeMsg('a1', 'assistant', 300),
     ])
     // 4500 tokens, threshold = 8000
-    const result = strategy1.evaluate(context, config)
+    const result = strategy1.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(false)
     expect(result.newContext).toBeUndefined()
   })
@@ -47,7 +47,7 @@ describe('strategy1', () => {
       makeMsg('tr1', 'tool_result', 2_000),
     ])
     // 8400 tokens > 8000 threshold
-    const result = strategy1.evaluate(context, config)
+    const result = strategy1.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(true)
   })
 
@@ -59,7 +59,7 @@ describe('strategy1', () => {
       makeMsg('tc1', 'tool_call', 200),
       makeMsg('tr1', 'tool_result', 2_000),
     ])
-    const result = strategy1.evaluate(context, config)
+    const result = strategy1.evaluate(context, config, 0)
     expect(result.newContext).toBeDefined()
     expect(result.newContext!.messages.length).toBe(2)
     expect(result.newContext!.messages[0].type).toBe('system')
@@ -76,7 +76,7 @@ describe('strategy1', () => {
     ])
     // Non-system tokens: 200 + 2000 + 200 + 2000 = 4400
     // Summary = ceil(4400 / 10) = 440
-    const result = strategy1.evaluate(context, config)
+    const result = strategy1.evaluate(context, config, 0)
     expect(result.summaryMessage!.tokens).toBe(440)
     // Total context after: 4000 + 440 = 4440
     expect(result.newContext!.totalTokens).toBe(4_440)
@@ -104,7 +104,7 @@ describe('strategy1', () => {
       makeMsg('u1', 'user', 200),
       makeMsg('a1', 'assistant', 4_200),
     ])
-    const result = strategy1.evaluate(context, config)
+    const result = strategy1.evaluate(context, config, 0)
     expect(result.compactedMessageIds).toEqual(['u1', 'a1'])
   })
 })
@@ -124,7 +124,7 @@ describe('strategy2', () => {
       makeMsg('a1', 'assistant', 300),
     ])
     // New content: 200 + 300 = 500, interval = 5000
-    const result = strategy2.evaluate(context, config)
+    const result = strategy2.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(false)
   })
 
@@ -137,7 +137,7 @@ describe('strategy2', () => {
       makeMsg('tr1', 'tool_result', 3_000),
     ])
     // New content: 200 + 2000 + 200 + 3000 = 5400 > 5000
-    const result = strategy2.evaluate(context, config)
+    const result = strategy2.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(true)
   })
 
@@ -151,7 +151,7 @@ describe('strategy2', () => {
       makeMsg('tr2', 'tool_result', 3_000),
     ])
     // New content (after s1): 200 + 2000 + 200 + 3000 = 5400 > 5000
-    const result = strategy2.evaluate(context, config)
+    const result = strategy2.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(true)
     // Summary = ceil(5400 / 10) = 540
     expect(result.summaryMessage!.tokens).toBe(540)
@@ -174,7 +174,7 @@ describe('strategy2', () => {
       makeMsg('tr2', 'tool_result', 2_000),
     ])
     // New content: 200 + 3000 + 200 + 2000 = 5400 > 5000
-    const result = strategy2.evaluate(context, config)
+    const result = strategy2.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(true)
     // New context: [system, s1, new_summary]
     expect(result.newContext!.messages.length).toBe(3)
@@ -196,7 +196,7 @@ describe('strategy2', () => {
     // New content: 200 + 3000 + 200 + 2000 = 5400 > 5000
     // New summary = ceil(5400 / 10) = 540
     // Total summaries: 4000 + 4000 + 540 = 8540 < 10000 → no meta-compaction
-    const result = strategy2.evaluate(context, config)
+    const result = strategy2.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(true)
     // Should have 3 summaries, no meta-compaction
     expect(result.newContext!.messages.length).toBe(4) // sys + 3 summaries
@@ -239,7 +239,7 @@ describe('strategy2', () => {
       makeMsg('a2', 'assistant', 5_000),
     ])
     // New content: 200 + 5000 = 5200 > 5000
-    const result = strategy2.evaluate(context, config)
+    const result = strategy2.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(true)
     // Only new content messages are in compactedMessageIds
     const compactedIds = result.compactedMessageIds!
@@ -254,7 +254,7 @@ describe('strategy2', () => {
       makeMsg('a1', 'assistant', 5_000),
     ])
     // New content: 5000, interval = 5000 → should NOT compact (<=)
-    expect(strategy2.evaluate(context, config).shouldCompact).toBe(false)
+    expect(strategy2.evaluate(context, config, 0).shouldCompact).toBe(false)
 
     const overContext = makeContext([
       makeMsg('sys', 'system', 4_000),
@@ -270,7 +270,7 @@ describe('strategy2', () => {
       makeMsg('u2', 'user', 200),
       makeMsg('a2', 'assistant', 5_000),
     ])
-    const result = strategy2.evaluate(context, config)
+    const result = strategy2.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(true)
     // After compaction: [system, s1, new_summary]
     // s1 should be the exact same object — ID preserved
@@ -295,7 +295,7 @@ describe('strategy4a', () => {
       makeMsg('u1', 'user', 200),
       makeMsg('a1', 'assistant', 300),
     ])
-    const result = strategy4a.evaluate(context, config)
+    const result = strategy4a.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(false)
     expect(result.externalStoreEntries).toBeUndefined()
   })
@@ -309,7 +309,7 @@ describe('strategy4a', () => {
       makeMsg('tr1', 'tool_result', 3_000),
     ])
     // New content: 200 + 2000 + 200 + 3000 = 5400 > 5000
-    const result = strategy4a.evaluate(context, config)
+    const result = strategy4a.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(true)
   })
 
@@ -338,7 +338,7 @@ describe('strategy4a', () => {
       makeMsg('tc1', 'tool_call', 200),
       makeMsg('tr1', 'tool_result', 3_000),
     ])
-    const result = strategy4a.evaluate(context, config)
+    const result = strategy4a.evaluate(context, config, 0)
     expect(result.externalStoreEntries).toBeDefined()
     expect(result.externalStoreEntries!.length).toBe(1)
 
@@ -358,7 +358,7 @@ describe('strategy4a', () => {
       makeMsg('tc2', 'tool_call', 200),
       makeMsg('tr2', 'tool_result', 3_000),
     ])
-    const result = strategy4a.evaluate(context, config)
+    const result = strategy4a.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(true)
     const entryIds = result.externalStoreEntries![0].originalMessageIds
     expect(entryIds).toEqual(result.compactedMessageIds)
@@ -372,8 +372,8 @@ describe('strategy4a', () => {
       makeMsg('tc1', 'tool_call', 200),
       makeMsg('tr1', 'tool_result', 3_000),
     ])
-    const result4a = strategy4a.evaluate(context, config)
-    const result2 = strategy2.evaluate(context, config)
+    const result4a = strategy4a.evaluate(context, config, 0)
+    const result2 = strategy2.evaluate(context, config, 0)
     expect(result4a.shouldCompact).toBe(result2.shouldCompact)
     expect(result4a.newContext!.totalTokens).toBe(result2.newContext!.totalTokens)
     expect(result4a.compactedMessageIds).toEqual(result2.compactedMessageIds)
@@ -421,7 +421,7 @@ describe('strategy4b', () => {
       makeMsg('u1', 'user', 200),
       makeMsg('a1', 'assistant', 300),
     ])
-    const result = strategy4b.evaluate(context, config)
+    const result = strategy4b.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(false)
     expect(result.externalStoreEntries).toBeUndefined()
   })
@@ -435,7 +435,7 @@ describe('strategy4b', () => {
       makeMsg('tr1', 'tool_result', 3_000),
     ])
     // New content: 5400 > 5000
-    const result = strategy4b.evaluate(context, config)
+    const result = strategy4b.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(true)
 
     // Context after: [system, summary]
@@ -465,7 +465,7 @@ describe('strategy4b', () => {
       makeMsg('tr2', 'tool_result', 3_000),
     ])
     // New content: 200 + 2000 + 200 + 3000 = 5400 > 5000
-    const result = strategy4b.evaluate(context, config)
+    const result = strategy4b.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(true)
 
     // Context after: [system, summary] — always just one summary
@@ -493,7 +493,7 @@ describe('strategy4b', () => {
       makeMsg('u2', 'user', 200),
       makeMsg('a2', 'assistant', 5_000),
     ])
-    const result = strategy4b.evaluate(context, config)
+    const result = strategy4b.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(true)
     // ALL non-system messages should be in compactedMessageIds
     expect(result.compactedMessageIds).toEqual(['s0', 'u2', 'a2'])
@@ -508,7 +508,7 @@ describe('strategy4b', () => {
       makeMsg('a2', 'assistant', 300),
     ])
     // New content: 200 + 300 = 500 < 5000, total: 5040 < 8000
-    const result = strategy4b.evaluate(context, config)
+    const result = strategy4b.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(false)
   })
 
@@ -538,7 +538,7 @@ describe('strategy4b', () => {
       makeMsg('u2', 'user', 200),
       makeMsg('a2', 'assistant', 5_000),
     ])
-    const result = strategy4b.evaluate(context, config)
+    const result = strategy4b.evaluate(context, config, 0)
     // Strategy always emits level 0; the pipeline overrides it
     expect(result.externalStoreEntries![0].level).toBe(0)
   })
@@ -560,7 +560,7 @@ describe('strategy4c', () => {
       makeMsg('u1', 'user', 200),
       makeMsg('a1', 'assistant', 300),
     ])
-    const result = strategy4c.evaluate(context, config)
+    const result = strategy4c.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(false)
     expect(result.externalStoreEntries).toBeUndefined()
   })
@@ -573,7 +573,7 @@ describe('strategy4c', () => {
       makeMsg('tc1', 'tool_call', 200),
       makeMsg('tr1', 'tool_result', 3_000),
     ])
-    const result = strategy4c.evaluate(context, config)
+    const result = strategy4c.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(true)
     expect(result.externalStoreEntries).toBeDefined()
     expect(result.externalStoreEntries!.length).toBe(1)
@@ -592,7 +592,7 @@ describe('strategy4c', () => {
       makeMsg('tc1', 'tool_call', 200),
       makeMsg('tr1', 'tool_result', 3_000),
     ])
-    const result = strategy4c.evaluate(context, config)
+    const result = strategy4c.evaluate(context, config, 0)
     // Compacted IDs include ALL non-system messages (same as strategy 2)
     expect(result.compactedMessageIds).toContain('u1')
     expect(result.compactedMessageIds).toContain('a1')
@@ -608,7 +608,7 @@ describe('strategy4c', () => {
       makeMsg('tc1', 'tool_call', 200),
       makeMsg('tr1', 'tool_result', 3_000),
     ])
-    const result = strategy4c.evaluate(context, config)
+    const result = strategy4c.evaluate(context, config, 0)
     expect(result.retrievalCompressedTokens).toBe(3_000)
   })
 
@@ -620,8 +620,8 @@ describe('strategy4c', () => {
       makeMsg('tc1', 'tool_call', 200),
       makeMsg('tr1', 'tool_result', 3_000),
     ])
-    const result4c = strategy4c.evaluate(context, config)
-    const result2 = strategy2.evaluate(context, config)
+    const result4c = strategy4c.evaluate(context, config, 0)
+    const result2 = strategy2.evaluate(context, config, 0)
     expect(result4c.newContext!.totalTokens).toBe(result2.newContext!.totalTokens)
     expect(result4c.compactedMessageIds).toEqual(result2.compactedMessageIds)
   })
@@ -636,7 +636,7 @@ describe('strategy4c', () => {
       makeMsg('tr2', 'tool_result', 2_500),
     ])
     // New content: 200 + 2000 + 300 + 200 + 2500 = 5200 > 5000
-    const result = strategy4c.evaluate(context, config)
+    const result = strategy4c.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(true)
     const entry = result.externalStoreEntries![0]
     expect(entry.originalMessageIds).toEqual(['tr1', 'tr2'])
@@ -650,7 +650,7 @@ describe('strategy4c', () => {
       makeMsg('a1', 'assistant', 5_000),
     ])
     // New content: 200 + 5000 = 5200 > 5000, but no tool_results
-    const result = strategy4c.evaluate(context, config)
+    const result = strategy4c.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(true)
     expect(result.externalStoreEntries).toBeUndefined()
     expect(result.retrievalCompressedTokens).toBe(0)
@@ -673,7 +673,7 @@ describe('strategy4d', () => {
       makeMsg('u1', 'user', 200),
       makeMsg('a1', 'assistant', 300),
     ])
-    const result = strategy4d.evaluate(context, config)
+    const result = strategy4d.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(false)
     expect(result.externalStoreEntries).toBeUndefined()
   })
@@ -687,7 +687,7 @@ describe('strategy4d', () => {
       makeMsg('tr1', 'tool_result', 3_000),
     ])
     // New content: 5400 > 5000
-    const result = strategy4d.evaluate(context, config)
+    const result = strategy4d.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(true)
 
     // Context after: [system, summary]
@@ -706,7 +706,7 @@ describe('strategy4d', () => {
       makeMsg('u2', 'user', 200),
       makeMsg('a2', 'assistant', 5_000),
     ])
-    const result = strategy4d.evaluate(context, config)
+    const result = strategy4d.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(true)
     expect(result.compactedMessageIds).toEqual(['s0', 'u2', 'a2'])
   })
@@ -721,7 +721,7 @@ describe('strategy4d', () => {
       makeMsg('tc2', 'tool_call', 200),
       makeMsg('tr2', 'tool_result', 3_000),
     ])
-    const result = strategy4d.evaluate(context, config)
+    const result = strategy4d.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(true)
     expect(result.newContext!.messages.length).toBe(2)
     expect(result.newContext!.messages[0].type).toBe('system')
@@ -736,7 +736,7 @@ describe('strategy4d', () => {
       makeMsg('tc1', 'tool_call', 200),
       makeMsg('tr1', 'tool_result', 3_000),
     ])
-    const result = strategy4d.evaluate(context, config)
+    const result = strategy4d.evaluate(context, config, 0)
     expect(result.externalStoreEntries).toBeDefined()
     expect(result.externalStoreEntries!.length).toBe(1)
 
@@ -754,7 +754,7 @@ describe('strategy4d', () => {
       makeMsg('a2', 'assistant', 300),
     ])
     // New content: 200 + 300 = 500 < 5000, total: 5040 < 8000
-    const result = strategy4d.evaluate(context, config)
+    const result = strategy4d.evaluate(context, config, 0)
     expect(result.shouldCompact).toBe(false)
   })
 
@@ -825,8 +825,8 @@ describe('getStrategy', () => {
       makeMsg('sys', 'system', 4_000),
       makeMsg('a1', 'assistant', 5_000),
     ])
-    const fromRegistry = getStrategy('full-compaction').evaluate(context, config)
-    const fromDirect = strategy1.evaluate(context, config)
+    const fromRegistry = getStrategy('full-compaction').evaluate(context, config, 0)
+    const fromDirect = strategy1.evaluate(context, config, 0)
     expect(fromRegistry.shouldCompact).toBe(fromDirect.shouldCompact)
   })
 })
