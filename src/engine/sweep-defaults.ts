@@ -13,7 +13,7 @@ export type ParamGroup =
   | 'lossless-retrieval'
   | 'pricing'
 
-export type ParamKind = 'numeric' | 'strategy' | 'boolean'
+export type ParamKind = 'numeric' | 'strategy' | 'boolean' | 'enum'
 
 interface BaseParamMeta {
   readonly displayName: string
@@ -44,7 +44,12 @@ export interface BooleanParamMeta extends BaseParamMeta {
   readonly paramKind: 'boolean'
 }
 
-export type ParamMeta = NumericParamMeta | StrategyParamMeta | BooleanParamMeta
+export interface EnumParamMeta extends BaseParamMeta {
+  readonly paramKind: 'enum'
+  readonly options: readonly { readonly value: string; readonly label: string }[]
+}
+
+export type ParamMeta = NumericParamMeta | StrategyParamMeta | BooleanParamMeta | EnumParamMeta
 
 export type ParamMetaRegistry = {
   readonly [K in keyof SimulationConfig]: ParamMeta
@@ -230,6 +235,32 @@ export const PARAM_META: ParamMetaRegistry = {
     defaultSweepMin: 0.5,
     defaultSweepMax: 1.0,
     defaultSweepSteps: 6,
+    defaultSweepScale: 'linear',
+  },
+
+  // Summary growth
+  summaryGrowthModel: {
+    paramKind: 'enum',
+    displayName: 'Summary growth model',
+    group: 'context-compaction',
+    isConversationShape: false,
+    options: [
+      { value: 'fixed', label: 'Fixed (convergence)' },
+      { value: 'logarithmic', label: 'Logarithmic (growing)' },
+    ],
+  },
+  summaryGrowthCoefficient: {
+    paramKind: 'numeric',
+    displayName: 'Summary growth coefficient',
+    group: 'context-compaction',
+    isConversationShape: false,
+    uiMin: 100,
+    uiMax: 5000,
+    uiStep: 100,
+    displayMultiplier: 1,
+    defaultSweepMin: 200,
+    defaultSweepMax: 3000,
+    defaultSweepSteps: 5,
     defaultSweepScale: 'linear',
   },
 

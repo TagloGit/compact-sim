@@ -31,13 +31,19 @@ export interface BooleanSweepRange {
   readonly kind: 'swept'
 }
 
+export interface EnumSweepRange {
+  readonly kind: 'swept'
+  readonly values: readonly string[]
+}
+
 export type SweepParameterDef =
   | FixedValue<number>
-  | FixedValue<StrategyType>
+  | FixedValue<string>
   | FixedValue<boolean>
   | NumericSweepRange
   | NumericValuesRange
   | StrategySweepRange
+  | EnumSweepRange
   | BooleanSweepRange
 
 // --- Sweep configuration ---

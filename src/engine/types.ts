@@ -9,6 +9,8 @@ export type MessageType =
 
 export type StrategyType = 'full-compaction' | 'incremental' | 'lossless-append' | 'lossless-hierarchical' | 'lossless-tool-results' | 'lcm-subagent'
 
+export type SummaryGrowthModel = 'fixed' | 'logarithmic'
+
 export interface Message {
   readonly id: string
   readonly type: MessageType
@@ -51,6 +53,10 @@ export interface SimulationConfig {
   readonly compressedTokensCap: number
   readonly lcmGrepRatio: number
   readonly lcmGrepResponseTokens: number
+
+  // Summary growth
+  readonly summaryGrowthModel: SummaryGrowthModel
+  readonly summaryGrowthCoefficient: number
 
   // Cache reliability
   readonly cacheReliability: number
@@ -150,6 +156,10 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   contextWindow: 200_000,
   compactionThreshold: 0.85,
   compressionRatio: 10,
+
+  // Summary growth
+  summaryGrowthModel: 'fixed',
+  summaryGrowthCoefficient: 1000,
 
   // Cache reliability
   cacheReliability: 1.0,

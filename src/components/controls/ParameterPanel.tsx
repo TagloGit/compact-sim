@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { SimulationConfig } from '@/engine/types'
-import type { StrategyType } from '@/engine/types'
+import type { StrategyType, SummaryGrowthModel } from '@/engine/types'
 import { PARAM_META, type NumericParamMeta } from '@/engine/sweep-defaults'
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible'
 import { Label } from '@/components/ui/label'
@@ -374,6 +374,22 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
             {slider('contextWindow')}
             {slider('compactionThreshold')}
             {slider('compressionRatio')}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Summary growth model</Label>
+              <Select
+                value={config.summaryGrowthModel}
+                onValueChange={(v) => { if (v) onUpdate('summaryGrowthModel', v as SummaryGrowthModel) }}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fixed" className="text-xs">Fixed (convergence)</SelectItem>
+                  <SelectItem value="logarithmic" className="text-xs">Logarithmic (growing)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {config.summaryGrowthModel === 'logarithmic' && slider('summaryGrowthCoefficient')}
             {numberInput('cacheReliability')}
           </div>
         </CollapsibleContent>

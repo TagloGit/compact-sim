@@ -21,7 +21,23 @@ export interface CompactionStrategy {
   readonly evaluate: (
     context: ContextState,
     config: SimulationConfig,
+    compressedTokens: number,
   ) => CompactionResult
+}
+
+/**
+ * Apply the summary growth floor when summaryGrowthModel is 'logarithmic'.
+ * Returns the larger of the computed summary tokens and the floor.
+ * For 'fixed' model, returns computedTokens unchanged.
+ */
+export function applySummaryFloor(
+  computedTokens: number,
+  totalCompressedTokens: number,
+  config: SimulationConfig,
+): number {
+  if (config.summaryGrowthModel === 'fixed') return computedTokens
+  const floor = config.summaryGrowthCoefficient * Math.log(1 + totalCompressedTokens / 1000)
+  return Math.max(computedTokens, Math.ceil(floor))
 }
 
 export class Strategy extends Context.Tag('Strategy')<
@@ -37,7 +53,7 @@ export class Strategy extends Context.Tag('Strategy')<
  * Summary size = compacted tokens / compression ratio.
  */
 export const strategy1: CompactionStrategy = {
-  evaluate(context, config) {
+  evaluate(context, config, compressedTokens) {
     const threshold = config.compactionThreshold * config.contextWindow
     if (context.totalTokens <= threshold) {
       return { shouldCompact: false }
@@ -52,7 +68,11 @@ export const strategy1: CompactionStrategy = {
       (sum, m) => sum + m.tokens,
       0,
     )
-    const summaryTokens = Math.ceil(compactedTokens / config.compressionRatio)
+    const summaryTokens = applySummaryFloor(
+      Math.ceil(compactedTokens / config.compressionRatio),
+      compressedTokens,
+      config,
+    )
 
     const summaryMessage: Message = {
       id: `summary-${Date.now()}`,
@@ -92,7 +112,7 @@ export const strategy1: CompactionStrategy = {
  * Context shape: [system] [summary_1] ... [summary_N] [recent raw content]
  */
 export const strategy2: CompactionStrategy = {
-  evaluate(context, config) {
+  evaluate(context, config, compressedTokens) {
     const systemMessage = context.messages.find((m) => m.type === 'system')
     const nonSystemMessages = context.messages.filter(
       (m) => m.type !== 'system',
@@ -121,8 +141,10 @@ export const strategy2: CompactionStrategy = {
     }
 
     // Compact new content into a summary
-    const summaryTokens = Math.ceil(
-      newContentTokens / config.compressionRatio,
+    const summaryTokens = applySummaryFloor(
+      Math.ceil(newContentTokens / config.compressionRatio),
+      compressedTokens,
+      config,
     )
     const newSummary: Message = {
       id: `summary-${Date.now()}`,
@@ -144,8 +166,10 @@ export const strategy2: CompactionStrategy = {
     // Meta-compaction: if accumulated summaries exceed threshold, re-compact
     let metaCompactionSummary: Message | undefined
     if (totalSummaryTokens > config.summaryAccumulationThreshold) {
-      const metaSummaryTokens = Math.ceil(
-        totalSummaryTokens / config.compressionRatio,
+      const metaSummaryTokens = applySummaryFloor(
+        Math.ceil(totalSummaryTokens / config.compressionRatio),
+        compressedTokens,
+        config,
       )
       metaCompactionSummary = {
         id: `summary-meta-${Date.now()}`,
@@ -190,8 +214,8 @@ export const strategy2: CompactionStrategy = {
  * a summary, enabling later retrieval.
  */
 export const strategy4a: CompactionStrategy = {
-  evaluate(context, config) {
-    const result = strategy2.evaluate(context, config)
+  evaluate(context, config, compressedTokens) {
+    const result = strategy2.evaluate(context, config, compressedTokens)
     if (!result.shouldCompact || !result.compactedMessageIds) {
       return result
     }
@@ -234,7 +258,7 @@ export const strategy4a: CompactionStrategy = {
  *   sum2 → sum1 → sum0 → original. Cost scales by (level + 1).
  */
 export const strategy4b: CompactionStrategy = {
-  evaluate(context, config) {
+  evaluate(context, config, compressedTokens) {
     const systemMessage = context.messages.find((m) => m.type === 'system')
     const nonSystemMessages = context.messages.filter(
       (m) => m.type !== 'system',
@@ -267,7 +291,11 @@ export const strategy4b: CompactionStrategy = {
       (sum, m) => sum + m.tokens,
       0,
     )
-    const summaryTokens = Math.ceil(allNonSystemTokens / config.compressionRatio)
+    const summaryTokens = applySummaryFloor(
+      Math.ceil(allNonSystemTokens / config.compressionRatio),
+      compressedTokens,
+      config,
+    )
     const summaryMessage: Message = {
       id: `summary-${Date.now()}`,
       type: 'summary',
@@ -315,8 +343,8 @@ export const strategy4b: CompactionStrategy = {
  * tokens that were compressed, not all compressed tokens.
  */
 export const strategy4c: CompactionStrategy = {
-  evaluate(context, config) {
-    const result = strategy2.evaluate(context, config)
+  evaluate(context, config, compressedTokens) {
+    const result = strategy2.evaluate(context, config, compressedTokens)
     if (!result.shouldCompact || !result.compactedMessageIds) {
       return result
     }
@@ -367,7 +395,7 @@ export const strategy4c: CompactionStrategy = {
  * the `lcmSubagentRetrievalCost` function in retrieval.ts.
  */
 export const strategy4d: CompactionStrategy = {
-  evaluate(context, config) {
+  evaluate(context, config, compressedTokens) {
     const systemMessage = context.messages.find((m) => m.type === 'system')
     const nonSystemMessages = context.messages.filter(
       (m) => m.type !== 'system',
@@ -400,7 +428,11 @@ export const strategy4d: CompactionStrategy = {
       (sum, m) => sum + m.tokens,
       0,
     )
-    const summaryTokens = Math.ceil(allNonSystemTokens / config.compressionRatio)
+    const summaryTokens = applySummaryFloor(
+      Math.ceil(allNonSystemTokens / config.compressionRatio),
+      compressedTokens,
+      config,
+    )
     const summaryMessage: Message = {
       id: `summary-${Date.now()}`,
       type: 'summary',

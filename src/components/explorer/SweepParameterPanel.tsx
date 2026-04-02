@@ -2,8 +2,8 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { GripVertical, ChevronDown, Lock, Unlock } from 'lucide-react'
 import type { SimulationConfig, StrategyType } from '@/engine/types'
 import { DEFAULT_CONFIG } from '@/engine/types'
-import type { SweepConfig, SweepParameterDef, NumericSweepRange, ParamScale } from '@/engine/sweep-types'
-import { PARAM_META, type ParamGroup, type NumericParamMeta } from '@/engine/sweep-defaults'
+import type { SweepConfig, SweepParameterDef, NumericSweepRange, ParamScale, EnumSweepRange } from '@/engine/sweep-types'
+import { PARAM_META, type ParamGroup, type NumericParamMeta, type EnumParamMeta } from '@/engine/sweep-defaults'
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -55,6 +55,7 @@ function getStepCount(key: keyof SimulationConfig, def: SweepParameterDef): numb
   if (def.kind === 'fixed') return 1
   const meta = PARAM_META[key]
   if (meta.paramKind === 'strategy') return (def as { values: StrategyType[] }).values.length
+  if (meta.paramKind === 'enum') return (def as EnumSweepRange).values.length
   if (meta.paramKind === 'boolean') return 2
   return (def as NumericSweepRange).steps
 }
@@ -64,6 +65,9 @@ function toSwept(key: keyof SimulationConfig): SweepParameterDef {
   const meta = PARAM_META[key]
   if (meta.paramKind === 'strategy') {
     return { kind: 'swept', values: STRATEGY_OPTIONS.map((o) => o.value) }
+  }
+  if (meta.paramKind === 'enum') {
+    return { kind: 'swept', values: (meta as EnumParamMeta).options.map((o) => o.value) }
   }
   if (meta.paramKind === 'boolean') {
     return { kind: 'swept' }
@@ -186,6 +190,40 @@ function StrategySweepEditor({
   )
 }
 
+/** Generic enum sweep editor — checkboxes for which values to include */
+function EnumSweepEditor({
+  options,
+  values,
+  onChange,
+}: {
+  options: readonly { readonly value: string; readonly label: string }[]
+  values: string[]
+  onChange: (values: string[]) => void
+}) {
+  return (
+    <div className="mt-1.5 space-y-1 pl-5">
+      {options.map((opt) => (
+        <label key={opt.value} className="flex items-center gap-2 text-xs cursor-pointer">
+          <input
+            type="checkbox"
+            checked={values.includes(opt.value)}
+            onChange={(e) => {
+              if (e.target.checked) {
+                onChange([...values, opt.value])
+              } else {
+                const next = values.filter((v) => v !== opt.value)
+                if (next.length > 0) onChange(next)
+              }
+            }}
+            className="size-3.5 rounded border-border accent-foreground"
+          />
+          <span className="text-muted-foreground">{opt.label}</span>
+        </label>
+      ))}
+    </div>
+  )
+}
+
 /** Inline editor for a fixed parameter value */
 function FixedValueEditor({
   paramKey,
@@ -205,6 +243,23 @@ function FixedValueEditor({
         </SelectTrigger>
         <SelectContent>
           {STRATEGY_OPTIONS.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value} className="text-xs">
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    )
+  }
+  if (meta.paramKind === 'enum') {
+    const enumMeta = meta as EnumParamMeta
+    return (
+      <Select value={value as string} onValueChange={(v) => { if (v) onChange(v) }}>
+        <SelectTrigger className="h-6 w-auto max-w-[180px] text-xs text-muted-foreground border-none shadow-none px-1 hover:bg-muted">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {enumMeta.options.map((opt) => (
             <SelectItem key={opt.value} value={opt.value} className="text-xs">
               {opt.label}
             </SelectItem>
@@ -358,6 +413,13 @@ function ParamRow({
       {isSwept && meta.paramKind === 'strategy' && (
         <StrategySweepEditor
           values={(def as { values: StrategyType[] }).values}
+          onChange={(values) => onUpdate({ kind: 'swept', values })}
+        />
+      )}
+      {isSwept && meta.paramKind === 'enum' && (
+        <EnumSweepEditor
+          options={(meta as EnumParamMeta).options}
+          values={[...((def as EnumSweepRange).values)]}
           onChange={(values) => onUpdate({ kind: 'swept', values })}
         />
       )}
