@@ -67,11 +67,32 @@ gh issue view <number> -R TagloGit/compact-sim
 
 ### Branch and PR conventions
 
+- **Never commit directly to main.** All work goes on a branch via a PR — no exceptions, even for small fixes or FINDINGS.md updates. If you catch yourself on `main`, create a branch before committing.
 - **One PR per issue.** Each issue gets its own branch and PR.
-- Branch naming: `experiment/NNN-short-title` (e.g. `experiment/003-cache-sensitivity`)
-- PR description includes `Closes #N` to auto-close the issue on merge
-- **Merge your own PRs** (squash merge to main) and set the issue label to `status: done`. Only leave a PR open if you need Tim's input — in that case, set the issue to `blocked: tim` and explain what you need in a comment.
-- **Wait for CI before merging** — always check that CI checks have passed before merging a PR. Use `gh pr checks <number> -R TagloGit/compact-sim` to verify. Do not merge while checks are still running. CI runs the full test suite (`npm test`), lint, and build — so **you do not need to run tests locally** before pushing. CI will catch any issues. This saves time; focus your iteration on the actual work.
+- Branch naming: `experiment/NNN-short-title` (e.g. `experiment/003-cache-sensitivity`). Professor branches: `professor/short-title`.
+- PR description includes `Closes #N` to auto-close the issue on merge.
+- **Merge your own PRs** and set the issue label to `status: done`. Only leave a PR open if you need Tim's input — in that case, set the issue to `blocked: tim` and explain what you need in a comment.
+- **Wait for CI before merging** — use `gh pr checks <number> -R TagloGit/compact-sim` to verify all checks pass before merging. Do not merge while checks are still running. CI runs tests, lint, and build — so you do not need to run tests locally.
+
+### Merge and cleanup procedure
+
+**Always follow this exact sequence when merging a PR:**
+
+```bash
+# 1. Squash merge via GitHub CLI (NEVER use regular merge)
+gh pr merge <number> -R TagloGit/compact-sim --squash --delete-branch
+
+# 2. Switch to main and pull the merged commit
+git checkout main
+git pull
+
+# 3. Delete the local branch (if it still exists)
+git branch -d <branch-name>
+```
+
+- **Only squash merges.** Never use `--merge` or `--rebase` on the CLI. Never use the GitHub merge button without squash.
+- **`--delete-branch`** removes the remote branch on merge. Step 3 cleans up the local copy.
+- **Always pull after merge** to sync your local main with the remote. Skipping this causes merge commits on the next push.
 
 ## Findings (`experiments/FINDINGS.md`)
 
@@ -117,6 +138,16 @@ When you identify a modelling gap, you can modify the simulation engine directly
 - You may merge engine-change PRs without Tim's approval
 - After engine changes, assess impact on prior findings and note any invalidated results in `FINDINGS.md`
 - **Frontend required**: any new parameters or changed defaults MUST also be added to the web UI (`src/components/controls/ParameterPanel.tsx`, `src/components/explorer/SweepParameterPanel.tsx`, etc.) so Tim can use them in the browser. Do not merge engine PRs that add parameters without corresponding frontend support.
+
+## Feedback from Tim
+
+Tim can leave feedback between iterations by writing to `experiments/FEEDBACK.md`. If this file is present, its contents will be appended to your prompt automatically.
+
+When you see a `## Feedback from Tim` section at the end of your prompt:
+1. **Read it carefully** — this is direct input from Tim and takes priority over backlog items
+2. **Acknowledge it** in your iteration summary
+3. **Act on it** — adjust your plans, update issues, or change direction as requested
+4. **Delete the file** — run `rm experiments/FEEDBACK.md` so it doesn't repeat next iteration
 
 ## Constraints
 

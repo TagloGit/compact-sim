@@ -33,7 +33,7 @@ You don't decide what to investigate — that's your director's job. You pick up
 4. **Do the work** — one task only. Follow the issue's acceptance criteria.
 5. **Write up** — journal entry for experiments, PR description for engine changes
 6. **Update state** — raise PR with `Closes #N`, update issue labels, merge if appropriate, update FINDINGS.md
-7. **Clean up branches** — after merging a PR, delete the local branch: `git branch -d <branch-name>`. Origin branches are deleted automatically on merge.
+7. **Merge and clean up** — follow the merge procedure in the shared context exactly: squash merge with `--delete-branch`, checkout main, pull, delete local branch.
 8. **Hand off** — you MUST end with the handoff block (see below)
 
 ## Engine changes — frontend requirement

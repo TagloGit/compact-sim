@@ -25,6 +25,7 @@
 VERBOSE=false
 PERSONA="professor"
 SHARED_CONTEXT="experiments/SHARED_CONTEXT.md"
+FEEDBACK_FILE="experiments/FEEDBACK.md"
 
 while [[ "$1" == -* ]]; do
   case "$1" in
@@ -72,6 +73,18 @@ build_prompt() {
   fi
 
   cat "$prompt_file" "$SHARED_CONTEXT"
+
+  # Inject feedback from Tim if the file exists and is non-empty
+  if [ -s "$FEEDBACK_FILE" ]; then
+    echo ""
+    echo "---"
+    echo ""
+    echo "## Feedback from Tim"
+    echo ""
+    echo "Tim has left the following feedback. Read it carefully, acknowledge it in your response, and act on it. After reading, delete the file (\`rm experiments/FEEDBACK.md\`) so it is not repeated in the next iteration."
+    echo ""
+    cat "$FEEDBACK_FILE"
+  fi
 }
 
 # Extracts the result text from a stream-json session file.
@@ -165,6 +178,10 @@ echo ""
 while [ $iteration -lt $MAX_ITERATIONS ]; do
   iteration=$((iteration + 1))
   echo "=== Iteration $iteration / $MAX_ITERATIONS [$PERSONA] ==="
+
+  if [ -s "$FEEDBACK_FILE" ]; then
+    echo "  [feedback injected from $FEEDBACK_FILE]"
+  fi
 
   session_file="experiments/data/session-${iteration}.json"
   prompt=$(build_prompt "$PERSONA")

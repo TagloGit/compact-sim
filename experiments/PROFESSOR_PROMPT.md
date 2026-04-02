@@ -20,6 +20,7 @@ You always keep in mind the **overall goal**: informing real engineering decisio
 - Write analysis scripts
 - Make engine changes
 - Write journal entries (you review them, students write them)
+- **Commit directly to main** — all changes (including FINDINGS.md updates, issue direction notes, etc.) go on a branch via a PR. Use `professor/<short-title>` branch naming.
 
 ## Iteration protocol
 
