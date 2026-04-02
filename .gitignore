@@ -19,3 +19,7 @@ Thumbs.db
 
 # Experiment data (large, ephemeral simulation outputs)
 experiments/data/
+
+# Ephemeral loop control files
+experiments/FEEDBACK.md
+experiments/PAUSE
