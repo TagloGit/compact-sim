@@ -13,10 +13,10 @@ describe('generateConversation', () => {
     const messages = run(DEFAULT_CONFIG)
 
     // 1 system + 1 initial user
-    // 100 cycles, each: assistant + reasoning + tool_call + tool_result = 4 per cycle
-    // User messages: at cycles where (cycle > 1 && cycle % 10 === 1): cycles 11, 21, 31, 41, 51, 61, 71, 81, 91 = 9 extra user messages
-    // Total: 2 + (100 * 4) + 9 = 411
-    expect(messages.length).toBe(411)
+    // 200 cycles, each: assistant + reasoning + tool_call + tool_result = 4 per cycle
+    // User messages: at cycles where (cycle > 1 && cycle % 12 === 1): 16 extra user messages
+    // Total: 2 + (200 * 4) + 16 = 818
+    expect(messages.length).toBe(818)
   })
 
   it('starts with system then user message', () => {
@@ -47,8 +47,8 @@ describe('generateConversation', () => {
   it('inserts user messages at the configured frequency', () => {
     const messages = run(DEFAULT_CONFIG)
     const userMessages = messages.filter((m) => m.type === 'user')
-    // Initial user + one at cycles 11, 21, 31, 41, 51, 61, 71, 81, 91 = 10 total
-    expect(userMessages.length).toBe(10)
+    // Initial user + one at cycles 13, 25, 37, ... (every 12 cycles) = 17 total
+    expect(userMessages.length).toBe(17)
   })
 
   it('skips reasoning messages when reasoningOutputSize is 0', () => {
@@ -60,8 +60,8 @@ describe('generateConversation', () => {
     const reasoning = messages.filter((m) => m.type === 'reasoning')
     expect(reasoning.length).toBe(0)
 
-    // Without reasoning: 2 + (100 * 3) + 9 = 311
-    expect(messages.length).toBe(311)
+    // Without reasoning: 2 + (200 * 3) + 16 = 618
+    expect(messages.length).toBe(618)
   })
 
   it('assigns unique IDs to all messages', () => {
