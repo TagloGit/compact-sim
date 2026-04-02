@@ -109,20 +109,24 @@ extract_summary() {
 extract_handoff() {
   local result="$1"
   echo "$result" | node -e "
-const lines = require('fs').readFileSync('/dev/stdin', 'utf-8').split('\n');
-let inHandoff = false;
-let next = '';
-for (const line of lines) {
-  if (line.trim() === '## Handoff') { inHandoff = true; continue; }
-  if (inHandoff && line.match(/\*\*Next:\*\*/)) {
-    const m = line.match(/\*\*Next:\*\*\s*(\S+)/);
-    if (m) next = m[1];
-    break;
+let buf = '';
+process.stdin.setEncoding('utf-8');
+process.stdin.on('data', c => buf += c);
+process.stdin.on('end', () => {
+  const lines = buf.split('\n');
+  let inHandoff = false;
+  let next = '';
+  for (const line of lines) {
+    if (line.trim() === '## Handoff') { inHandoff = true; continue; }
+    if (inHandoff && line.match(/\*\*Next:\*\*/)) {
+      const m = line.match(/\*\*Next:\*\*\s*(\S+)/);
+      if (m) next = m[1];
+      break;
+    }
+    if (inHandoff && line.startsWith('## ')) break;
   }
-  // Stop if we hit another heading after Handoff
-  if (inHandoff && line.startsWith('## ')) break;
-}
-process.stdout.write(next);
+  process.stdout.write(next);
+});
 "
 }
 
