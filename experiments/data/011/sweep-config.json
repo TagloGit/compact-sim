@@ -1,0 +1,41 @@
+{
+  "selectedStrategy": {
+    "kind": "swept",
+    "values": ["full-compaction", "incremental", "lossless-append", "lossless-hierarchical", "lossless-tool-results", "lcm-subagent"]
+  },
+  "toolCallCycles": {
+    "kind": "swept",
+    "values": [100, 150, 200]
+  },
+  "cacheReliability": {
+    "kind": "swept",
+    "values": [1.0, 0.95, 0.9, 0.8, 0.7, 0.5]
+  },
+  "toolCallSize": { "kind": "fixed", "value": 75 },
+  "toolResultSize": { "kind": "fixed", "value": 380 },
+  "assistantMessageSize": { "kind": "fixed", "value": 130 },
+  "reasoningOutputSize": { "kind": "fixed", "value": 500 },
+  "userMessageFrequency": { "kind": "fixed", "value": 12 },
+  "userMessageSize": { "kind": "fixed", "value": 60 },
+  "systemPromptSize": { "kind": "fixed", "value": 10000 },
+  "contextWindow": { "kind": "fixed", "value": 200000 },
+  "compactionThreshold": { "kind": "fixed", "value": 0.85 },
+  "compressionRatio": { "kind": "fixed", "value": 10 },
+  "baseInputPrice": { "kind": "fixed", "value": 0.000005 },
+  "outputPrice": { "kind": "fixed", "value": 0.000025 },
+  "cacheWriteMultiplier": { "kind": "fixed", "value": 1.25 },
+  "cacheHitMultiplier": { "kind": "fixed", "value": 0.1 },
+  "minCacheableTokens": { "kind": "fixed", "value": 4096 },
+  "compactionInputPrice": { "kind": "fixed", "value": 8e-7 },
+  "compactionOutputPrice": { "kind": "fixed", "value": 0.000004 },
+  "incrementalInterval": { "kind": "fixed", "value": 30000 },
+  "summaryAccumulationThreshold": { "kind": "fixed", "value": 50000 },
+  "toolCompressionEnabled": { "kind": "fixed", "value": false },
+  "toolCompressionRatio": { "kind": "fixed", "value": 5 },
+  "retrievalQueryTokens": { "kind": "fixed", "value": 500 },
+  "retrievalResponseTokens": { "kind": "fixed", "value": 300 },
+  "pRetrieveMax": { "kind": "fixed", "value": 0.2 },
+  "compressedTokensCap": { "kind": "fixed", "value": 100000 },
+  "lcmGrepRatio": { "kind": "fixed", "value": 0.7 },
+  "lcmGrepResponseTokens": { "kind": "fixed", "value": 100 }
+}
