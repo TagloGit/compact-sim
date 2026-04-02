@@ -134,17 +134,17 @@ export interface SimulationResult {
 
 export const DEFAULT_CONFIG: SimulationConfig = {
   // Strategy selection
-  selectedStrategy: 'full-compaction',
+  selectedStrategy: 'lcm-subagent',
 
-  // Conversation shape
-  toolCallCycles: 100,
-  toolCallSize: 200,
-  toolResultSize: 2_000,
-  assistantMessageSize: 300,
+  // Conversation shape (calibrated from Models Agent reference conversations)
+  toolCallCycles: 200,
+  toolCallSize: 75,
+  toolResultSize: 380,
+  assistantMessageSize: 130,
   reasoningOutputSize: 500,
-  userMessageFrequency: 10,
-  userMessageSize: 200,
-  systemPromptSize: 4_000,
+  userMessageFrequency: 12,
+  userMessageSize: 60,
+  systemPromptSize: 10_000,
 
   // Context & compaction
   contextWindow: 200_000,
