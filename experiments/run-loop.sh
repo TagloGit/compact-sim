@@ -215,22 +215,52 @@ while [ $iteration -lt $MAX_ITERATIONS ]; do
     break
   fi
 
-  if [ "$VERBOSE" = true ]; then
-    echo "$prompt" | claude -p - \
-      --model opus \
-      --dangerously-skip-permissions \
-      --max-turns 100 \
-      --verbose \
-      --output-format stream-json \
-      | tee "$session_file"
-  else
-    echo "$prompt" | claude -p - \
-      --model opus \
-      --dangerously-skip-permissions \
-      --max-turns 100 \
-      --verbose \
-      --output-format stream-json \
-      > "$session_file"
+  # Retry loop for transient API errors
+  MAX_RETRIES=3
+  retry=0
+  api_error=true
+
+  while [ "$api_error" = true ] && [ $retry -lt $MAX_RETRIES ]; do
+    if [ $retry -gt 0 ]; then
+      backoff=$(( 30 * retry ))
+      echo "  Retrying in ${backoff}s (attempt $((retry + 1))/$MAX_RETRIES)..."
+      sleep $backoff
+    fi
+
+    if [ "$VERBOSE" = true ]; then
+      echo "$prompt" | claude -p - \
+        --model opus \
+        --dangerously-skip-permissions \
+        --max-turns 100 \
+        --verbose \
+        --output-format stream-json \
+        | tee "$session_file"
+    else
+      echo "$prompt" | claude -p - \
+        --model opus \
+        --dangerously-skip-permissions \
+        --max-turns 100 \
+        --verbose \
+        --output-format stream-json \
+        > "$session_file"
+    fi
+
+    # Check for API errors in session output
+    if grep -q '"type":"api_error"\|"type":"overloaded_error"\|"error":{"type":"api_error"' "$session_file" 2>/dev/null; then
+      echo "  API error detected in iteration $iteration."
+      echo "API error on attempt $((retry + 1)): $(grep -o 'API Error.*' "experiments/data/session-${iteration}-result.txt" 2>/dev/null || echo 'see session file')" >> "$DEBUG_LOG"
+      retry=$((retry + 1))
+    else
+      api_error=false
+    fi
+  done
+
+  if [ "$api_error" = true ]; then
+    echo "  Failed after $MAX_RETRIES retries. Skipping iteration."
+    echo "Iteration $iteration FAILED after $MAX_RETRIES retries" >> "$DEBUG_LOG"
+    # Don't count this iteration — decrement and continue to next
+    iteration=$((iteration - 1))
+    continue
   fi
 
   # Extract result text from session file
@@ -295,8 +325,20 @@ while [ $iteration -lt $MAX_ITERATIONS ]; do
         echo "Research complete after $iteration iterations."
         break
       else
-        echo "No handoff signal detected (got: '$handoff'). Stopping loop."
-        break
+        echo "No handoff signal detected (got: '$handoff'). Retrying same persona ($PERSONA)."
+        # Write context about the failed iteration into the handoff file
+        # so the next iteration knows it may be resuming partial work
+        cat > "$HANDOFF_FILE" <<HANDOFF_EOF
+The previous iteration ($PERSONA) ended unexpectedly without completing — likely due to an API error or crash mid-task. You may be resuming partially-completed work.
+
+Check git status and recent commits to see what was already done. Do NOT redo work that was already committed. Pick up where the previous iteration left off.
+
+Last 10 lines of the failed iteration's output:
+\`\`\`
+$(echo "$result" | tail -10)
+\`\`\`
+HANDOFF_EOF
+        # Keep PERSONA unchanged so next iteration retries the same role
       fi
       ;;
   esac
