@@ -431,7 +431,7 @@ At 200k window, all thresholds [0.70–0.95] produce identical costs. At 40k win
 3. **Retrieval quality**: `pRetrieveMax` is fixed and doesn't degrade with store size. Exp 009 showed the recommendation remains robust unless average retrieval rates are implausibly high (>30–80% of steps).
 4. **Conversation determinism**: Simulated conversations are deterministic averages. Real conversations have higher variance in tool result sizes and cycle counts.
 5. **Cache model at default is optimistic** (#93, investigated in Exp 011): The `cacheReliability` parameter now allows probabilistic cache degradation. At rel=1.0 (default), absolute costs are optimistic. Exp 011 confirmed that unreliable caching **widens** lcm-subagent's advantage (from 0.5–8.2% to 3–17% over incremental) and eliminates the ~89-cycle crossover. Strategy *rankings* are robust; absolute *cost estimates* from prior experiments should be treated as lower bounds. A realistic production value of rel=0.8–0.9 increases costs 30–100%.
-6. **Reasoning output uncalibrated** (#94): `reasoningOutputSize` defaults to 500 tokens; analysis of 127 Models Agent JSON conversations shows mean=265, and only 47% of turns include thinking. The sim overcharges reasoning ~3-4x. Affects absolute costs (all strategies equally), not rankings.
+6. ~~**Reasoning output uncalibrated** (#94)~~: **Resolved.** `reasoningOutputSize` now defaults to 265 (calibrated mean), and `reasoningFrequency` parameter added (default 0.47). Prior experiments (001–014) overcharged reasoning ~3-4x — absolute costs were overstated, but strategy rankings remain valid.
 7. **Summary convergence ceiling** (#95, investigated in Exp 013): ~~At ratio=10 with 30k interval, summary converges to ~3.3k tokens.~~ Now configurable via `summaryGrowthModel` ('fixed' | 'logarithmic') and `summaryGrowthCoefficient` (default 1000). Exp 013 confirmed: logarithmic growth increases costs 1.5–7.6% depending on strategy, with incremental-family strategies hit hardest (7.6% at 200 cycles). Strategy *rankings* are completely stable — lcm-subagent wins at all growth models and coefficients. The 30k interval recommendation is validated and strengthened: under logarithmic growth, 15k becomes 24–28% more expensive for incremental (a double artefact eliminated). `summaryGrowthCoefficient` sensitivity is 10–24% across the 500–2000 range — needs real-world calibration for accurate absolute costs but doesn't affect rankings.
 8. **Tool compression is free in the model** (#103, Exp 012): `toolCompressionEnabled` reduces tool result tokens at ingestion with no processing cost. In practice, ratio≥5 requires LLM summarisation with its own API cost. The sim's 3–5% savings for lcm-subagent at ratio=3+ may be partially offset by compression costs. Ratio=3 is achievable with structured extraction (no LLM), making it the practical recommendation.
 
@@ -467,7 +467,7 @@ Thinking/assistant ratio: 3.0x (vs implied 3.8x at defaults). Heavy-tailed distr
 
 - **Realistic cacheReliability value**: What is the actual API cache hit rate in production? Measuring this would ground Exp 011's findings and give accurate absolute cost projections.
 - **Cache reliability × incrementalInterval interaction**: At shorter intervals, more compaction events create more cache invalidation — but each invalidation affects a smaller context. May shift the "30k is safest" recommendation.
-- **Reasoning frequency impact** (#94): Does modelling reasoning on only 47% of turns shift any strategy rankings, or just absolute costs?
+- ~~**Reasoning frequency impact** (#94): Does modelling reasoning on only 47% of turns shift any strategy rankings, or just absolute costs?~~ **Answered (#94):** Reduces absolute costs ~3-4x vs prior overestimate. Rankings unaffected (reasoning is strategy-agnostic). Now calibrated as defaults.
 - ~~**Summary growth models** (#95): Does allowing summary size to grow sublinearly over long sessions change the balance between in-context retention vs retrieval?~~ **Answered (Exp 013):** No — rankings stable, lcm advantage widens (8.2%→12.1%). 30k interval validated.
 - **summaryGrowthCoefficient calibration**: Real compaction outputs needed to calibrate coefficient (currently untested range 500–2000). Affects absolute costs 10–24% but not rankings.
 - **Growth model × cacheReliability interaction**: Exp 011 showed reliability widens lcm advantage; Exp 013 showed growth model does too. Combined effect may compound.
@@ -492,7 +492,7 @@ Thinking/assistant ratio: 3.0x (vs implied 3.8x at defaults). Heavy-tailed distr
 **Wrap-up backlog (complete before Phase 4 experiments):**
 - ~~**#96 (Update defaults)** — DONE; DEFAULT_CONFIG now uses calibrated Models Agent values~~
 - ~~**#95 (Summary growth model)** — DONE; `summaryGrowthModel` + `summaryGrowthCoefficient` added (PR #117)~~
-- **#94 (Reasoning calibration)** — MEDIUM; model fidelity improvement
+- ~~**#94 (Reasoning calibration)** — DONE; `reasoningFrequency` (0.47) and `reasoningOutputSize` (265) calibrated from 127 conversations (PR #124, #125)~~
 
 ---
 
