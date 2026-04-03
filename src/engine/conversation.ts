@@ -41,7 +41,12 @@ export const generateConversation = (
 
       push('assistant', config.assistantMessageSize)
 
-      if (config.reasoningOutputSize > 0) {
+      if (
+        config.reasoningOutputSize > 0 &&
+        config.reasoningFrequency > 0 &&
+        Math.floor(cycle * config.reasoningFrequency) >
+          Math.floor((cycle - 1) * config.reasoningFrequency)
+      ) {
         push('reasoning', config.reasoningOutputSize)
       }
 

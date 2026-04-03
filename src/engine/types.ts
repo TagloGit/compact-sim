@@ -29,6 +29,7 @@ export interface SimulationConfig {
   readonly toolResultSize: number
   readonly assistantMessageSize: number
   readonly reasoningOutputSize: number
+  readonly reasoningFrequency: number
   readonly userMessageFrequency: number
   readonly userMessageSize: number
   readonly systemPromptSize: number
@@ -147,7 +148,8 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   toolCallSize: 75,
   toolResultSize: 380,
   assistantMessageSize: 130,
-  reasoningOutputSize: 500,
+  reasoningOutputSize: 265,
+  reasoningFrequency: 0.47,
   userMessageFrequency: 12,
   userMessageSize: 60,
   systemPromptSize: 10_000,

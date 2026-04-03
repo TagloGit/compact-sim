@@ -13,10 +13,11 @@ describe('generateConversation', () => {
     const messages = run(DEFAULT_CONFIG)
 
     // 1 system + 1 initial user
-    // 200 cycles, each: assistant + reasoning + tool_call + tool_result = 4 per cycle
+    // 200 cycles, each: assistant + tool_call + tool_result = 3 per cycle
+    // Reasoning: floor(200 * 0.47) = 94 cycles get reasoning
     // User messages: at cycles where (cycle > 1 && cycle % 12 === 1): 16 extra user messages
-    // Total: 2 + (200 * 4) + 16 = 818
-    expect(messages.length).toBe(818)
+    // Total: 2 + (200 * 3) + 94 + 16 = 712
+    expect(messages.length).toBe(712)
   })
 
   it('starts with system then user message', () => {
@@ -26,7 +27,8 @@ describe('generateConversation', () => {
   })
 
   it('produces correct cycle ordering: assistant, reasoning, tool_call, tool_result', () => {
-    const messages = run(DEFAULT_CONFIG)
+    const config = { ...DEFAULT_CONFIG, reasoningFrequency: 1.0 }
+    const messages = run(config)
     // First cycle starts at index 2
     expect(messages[2].type).toBe('assistant')
     expect(messages[3].type).toBe('reasoning')
@@ -35,13 +37,14 @@ describe('generateConversation', () => {
   })
 
   it('assigns token sizes matching config values', () => {
-    const messages = run(DEFAULT_CONFIG)
-    expect(messages[0].tokens).toBe(DEFAULT_CONFIG.systemPromptSize)
-    expect(messages[1].tokens).toBe(DEFAULT_CONFIG.userMessageSize)
-    expect(messages[2].tokens).toBe(DEFAULT_CONFIG.assistantMessageSize)
-    expect(messages[3].tokens).toBe(DEFAULT_CONFIG.reasoningOutputSize)
-    expect(messages[4].tokens).toBe(DEFAULT_CONFIG.toolCallSize)
-    expect(messages[5].tokens).toBe(DEFAULT_CONFIG.toolResultSize)
+    const config = { ...DEFAULT_CONFIG, reasoningFrequency: 1.0 }
+    const messages = run(config)
+    expect(messages[0].tokens).toBe(config.systemPromptSize)
+    expect(messages[1].tokens).toBe(config.userMessageSize)
+    expect(messages[2].tokens).toBe(config.assistantMessageSize)
+    expect(messages[3].tokens).toBe(config.reasoningOutputSize)
+    expect(messages[4].tokens).toBe(config.toolCallSize)
+    expect(messages[5].tokens).toBe(config.toolResultSize)
   })
 
   it('inserts user messages at the configured frequency', () => {
@@ -62,6 +65,39 @@ describe('generateConversation', () => {
 
     // Without reasoning: 2 + (200 * 3) + 16 = 618
     expect(messages.length).toBe(618)
+  })
+
+  it('skips reasoning messages when reasoningFrequency is 0', () => {
+    const config: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      reasoningFrequency: 0,
+    }
+    const messages = run(config)
+    const reasoning = messages.filter((m) => m.type === 'reasoning')
+    expect(reasoning.length).toBe(0)
+  })
+
+  it('includes reasoning on every cycle when reasoningFrequency is 1', () => {
+    const config: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      reasoningFrequency: 1.0,
+      toolCallCycles: 10,
+    }
+    const messages = run(config)
+    const reasoning = messages.filter((m) => m.type === 'reasoning')
+    expect(reasoning.length).toBe(10)
+  })
+
+  it('distributes reasoning evenly based on reasoningFrequency', () => {
+    const config: SimulationConfig = {
+      ...DEFAULT_CONFIG,
+      reasoningFrequency: 0.47,
+      toolCallCycles: 200,
+    }
+    const messages = run(config)
+    const reasoning = messages.filter((m) => m.type === 'reasoning')
+    // floor(200 * 0.47) = 94
+    expect(reasoning.length).toBe(94)
   })
 
   it('assigns unique IDs to all messages', () => {
