@@ -334,7 +334,7 @@ Slower context growth reduces compaction frequency. full-compaction stops compac
 4. **Conversation determinism**: Simulated conversations are deterministic averages. Real conversations have higher variance in tool result sizes and cycle counts.
 5. **Cache model at default is optimistic** (#93, investigated in Exp 011): The `cacheReliability` parameter now allows probabilistic cache degradation. At rel=1.0 (default), absolute costs are optimistic. Exp 011 confirmed that unreliable caching **widens** lcm-subagent's advantage (from 0.5–8.2% to 3–17% over incremental) and eliminates the ~89-cycle crossover. Strategy *rankings* are robust; absolute *cost estimates* from prior experiments should be treated as lower bounds. A realistic production value of rel=0.8–0.9 increases costs 30–100%.
 6. **Reasoning output uncalibrated** (#94): `reasoningOutputSize` defaults to 500 tokens; analysis of 127 Models Agent JSON conversations shows mean=265, and only 47% of turns include thinking. The sim overcharges reasoning ~3-4x. Affects absolute costs (all strategies equally), not rankings.
-7. **Summary convergence ceiling** (#95): At ratio=10 with 30k interval, summary converges to ~3.3k tokens (`interval / (ratio - 1)`) within 2-3 compactions. For 200-cycle sessions compressing 100k+ of history, a fixed 3.3k summary is likely insufficient. The sim has no mechanism for summary quality degradation or growth over time.
+7. **Summary convergence ceiling** (#95, addressed): ~~At ratio=10 with 30k interval, summary converges to ~3.3k tokens.~~ Now configurable via `summaryGrowthModel` ('fixed' | 'logarithmic') and `summaryGrowthCoefficient` (default 1000). The 'logarithmic' model applies a growing floor: `coefficient × ln(1 + totalCompressed / 1000)`, preventing convergence in long sessions. Default 'fixed' preserves existing behaviour and prior results. Experiments comparing growth models are pending.
 8. **Tool compression is free in the model** (#103, Exp 012): `toolCompressionEnabled` reduces tool result tokens at ingestion with no processing cost. In practice, ratio≥5 requires LLM summarisation with its own API cost. The sim's 3–5% savings for lcm-subagent at ratio=3+ may be partially offset by compression costs. Ratio=3 is achievable with structured extraction (no LLM), making it the practical recommendation.
 
 ### Cost structure insight (post-Phase 2 review)
@@ -387,7 +387,7 @@ Thinking/assistant ratio: 3.0x (vs implied 3.8x at defaults). Heavy-tailed distr
 
 **Wrap-up backlog (complete before Phase 4 experiments):**
 - ~~**#96 (Update defaults)** — DONE; DEFAULT_CONFIG now uses calibrated Models Agent values~~
-- **#95 (Summary growth model)** — MEDIUM; engine change that enables Phase 4 context quality work
+- ~~**#95 (Summary growth model)** — DONE; `summaryGrowthModel` + `summaryGrowthCoefficient` added (PR #117)~~
 - **#94 (Reasoning calibration)** — MEDIUM; model fidelity improvement
 
 ---
