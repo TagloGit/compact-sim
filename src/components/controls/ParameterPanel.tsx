@@ -398,6 +398,7 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
             {slider('toolResultSize')}
             {slider('assistantMessageSize')}
             {slider('reasoningOutputSize')}
+            {slider('reasoningFrequency')}
             {numberInput('userMessageFrequency')}
             {slider('userMessageSize')}
             {slider('systemPromptSize')}

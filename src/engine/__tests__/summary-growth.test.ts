@@ -63,6 +63,8 @@ describe('summary growth — full simulation', () => {
     compressionRatio: 10,
     incrementalInterval: 30_000,
     selectedStrategy: 'incremental',
+    reasoningFrequency: 1.0,
+    reasoningOutputSize: 500,
   }
 
   it('fixed model produces identical results to default (backwards compatibility)', () => {

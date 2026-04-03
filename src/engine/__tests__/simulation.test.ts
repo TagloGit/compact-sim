@@ -14,11 +14,12 @@ describe('runSimulation', () => {
     const config: SimulationConfig = {
       ...DEFAULT_CONFIG,
       toolCallCycles: 5,
+      reasoningFrequency: 1.0,
       contextWindow: 200_000,
       compactionThreshold: 0.85,
     }
     const result = run(config)
-    // 5 cycles with reasoning: 2 + (5 * 4) + 0 user messages (freq 10, only 5 cycles) = 22
+    // 5 cycles with reasoning (freq 1.0): 2 + (5 * 4) + 0 user messages (freq 10, only 5 cycles) = 22
     expect(result.snapshots.length).toBe(22)
   })
 
@@ -85,6 +86,7 @@ describe('runSimulation', () => {
       ...DEFAULT_CONFIG,
       toolCallCycles: 5,
       reasoningOutputSize: 500,
+      reasoningFrequency: 1.0,
     }
     const result = run(config)
     for (const snapshot of result.snapshots) {
