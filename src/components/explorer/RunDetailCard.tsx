@@ -111,6 +111,7 @@ function formatConfigValue(
   meta: (typeof PARAM_META)[keyof SimulationConfig],
 ): string {
   if (meta.paramKind === 'strategy') return String(value)
+  if (meta.paramKind === 'summaryGrowth') return String(value)
   if (meta.paramKind === 'boolean') return value ? 'On' : 'Off'
   const displayVal = (value as number) * meta.displayMultiplier
   if (Number.isInteger(displayVal)) return displayVal.toLocaleString()

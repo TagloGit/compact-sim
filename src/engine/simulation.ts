@@ -116,7 +116,7 @@ export function evaluateCompaction(
   config: SimulationConfig,
 ): StepState {
   const strategy = getStrategy(config.selectedStrategy)
-  const result = strategy.evaluate(state.context, config)
+  const result = strategy.evaluate(state.context, config, state.compressedTokens)
 
   if (!result.shouldCompact || !result.newContext || !result.summaryMessage) {
     return state

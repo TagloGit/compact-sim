@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { GripVertical, ChevronDown, Lock, Unlock } from 'lucide-react'
-import type { SimulationConfig, StrategyType } from '@/engine/types'
+import type { SimulationConfig, StrategyType, SummaryGrowthModel } from '@/engine/types'
 import { DEFAULT_CONFIG } from '@/engine/types'
-import type { SweepConfig, SweepParameterDef, NumericSweepRange, ParamScale } from '@/engine/sweep-types'
+import type { SweepConfig, SweepParameterDef, NumericSweepRange, ParamScale, SummaryGrowthSweepRange } from '@/engine/sweep-types'
 import { PARAM_META, type ParamGroup, type NumericParamMeta } from '@/engine/sweep-defaults'
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
@@ -23,6 +23,12 @@ const STRATEGY_OPTIONS: { value: StrategyType; label: string }[] = [
   { value: 'lossless-hierarchical', label: '4b — Lossless hierarchical' },
   { value: 'lossless-tool-results', label: '4c — Tool-results lossless' },
   { value: 'lcm-subagent', label: '4d — LCM sub-agent' },
+]
+
+// All summary growth model options
+const SUMMARY_GROWTH_OPTIONS: { value: SummaryGrowthModel; label: string }[] = [
+  { value: 'fixed', label: 'Fixed (convergent)' },
+  { value: 'logarithmic', label: 'Logarithmic growth' },
 ]
 
 // Group display order and labels
@@ -55,6 +61,7 @@ function getStepCount(key: keyof SimulationConfig, def: SweepParameterDef): numb
   if (def.kind === 'fixed') return 1
   const meta = PARAM_META[key]
   if (meta.paramKind === 'strategy') return (def as { values: StrategyType[] }).values.length
+  if (meta.paramKind === 'summaryGrowth') return (def as { values: SummaryGrowthModel[] }).values.length
   if (meta.paramKind === 'boolean') return 2
   return (def as NumericSweepRange).steps
 }
@@ -64,6 +71,9 @@ function toSwept(key: keyof SimulationConfig): SweepParameterDef {
   const meta = PARAM_META[key]
   if (meta.paramKind === 'strategy') {
     return { kind: 'swept', values: STRATEGY_OPTIONS.map((o) => o.value) }
+  }
+  if (meta.paramKind === 'summaryGrowth') {
+    return { kind: 'swept', values: SUMMARY_GROWTH_OPTIONS.map((o) => o.value) }
   }
   if (meta.paramKind === 'boolean') {
     return { kind: 'swept' }
@@ -205,6 +215,22 @@ function FixedValueEditor({
         </SelectTrigger>
         <SelectContent>
           {STRATEGY_OPTIONS.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value} className="text-xs">
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    )
+  }
+  if (meta.paramKind === 'summaryGrowth') {
+    return (
+      <Select value={value as string} onValueChange={(v) => { if (v) onChange(v) }}>
+        <SelectTrigger className="h-6 w-auto max-w-[180px] text-xs text-muted-foreground border-none shadow-none px-1 hover:bg-muted">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {SUMMARY_GROWTH_OPTIONS.map((opt) => (
             <SelectItem key={opt.value} value={opt.value} className="text-xs">
               {opt.label}
             </SelectItem>
@@ -360,6 +386,29 @@ function ParamRow({
           values={(def as { values: StrategyType[] }).values}
           onChange={(values) => onUpdate({ kind: 'swept', values })}
         />
+      )}
+      {isSwept && meta.paramKind === 'summaryGrowth' && (
+        <div className="mt-1.5 space-y-1 pl-5">
+          {SUMMARY_GROWTH_OPTIONS.map((opt) => (
+            <label key={opt.value} className="flex items-center gap-2 text-xs cursor-pointer">
+              <input
+                type="checkbox"
+                checked={(def as SummaryGrowthSweepRange).values.includes(opt.value)}
+                onChange={(e) => {
+                  const current = (def as SummaryGrowthSweepRange).values
+                  if (e.target.checked) {
+                    onUpdate({ kind: 'swept', values: [...current, opt.value] })
+                  } else {
+                    const next = current.filter((v) => v !== opt.value)
+                    if (next.length > 0) onUpdate({ kind: 'swept', values: next })
+                  }
+                }}
+                className="size-3.5 rounded border-border accent-foreground"
+              />
+              <span className="text-muted-foreground">{opt.label}</span>
+            </label>
+          ))}
+        </div>
       )}
       {isSwept && meta.paramKind === 'boolean' && (
         <div className="mt-0.5 pl-5">

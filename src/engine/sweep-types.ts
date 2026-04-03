@@ -1,4 +1,4 @@
-import type { SimulationConfig, StrategyType } from './types'
+import type { SimulationConfig, StrategyType, SummaryGrowthModel } from './types'
 
 // --- Sweep parameter definitions ---
 
@@ -27,6 +27,11 @@ export interface NumericValuesRange {
   readonly values: number[]
 }
 
+export interface SummaryGrowthSweepRange {
+  readonly kind: 'swept'
+  readonly values: SummaryGrowthModel[]
+}
+
 export interface BooleanSweepRange {
   readonly kind: 'swept'
 }
@@ -34,10 +39,12 @@ export interface BooleanSweepRange {
 export type SweepParameterDef =
   | FixedValue<number>
   | FixedValue<StrategyType>
+  | FixedValue<SummaryGrowthModel>
   | FixedValue<boolean>
   | NumericSweepRange
   | NumericValuesRange
   | StrategySweepRange
+  | SummaryGrowthSweepRange
   | BooleanSweepRange
 
 // --- Sweep configuration ---

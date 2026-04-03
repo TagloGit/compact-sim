@@ -360,6 +360,7 @@ export function HeatBar({ results, selectedMetric, selectedIndex, onSelect, swep
 function formatParamValue(key: keyof SimulationConfig, value: SimulationConfig[keyof SimulationConfig]): string {
   const meta = PARAM_META[key]
   if (meta.paramKind === 'strategy') return String(value)
+  if (meta.paramKind === 'summaryGrowth') return String(value)
   if (meta.paramKind === 'boolean') return value ? 'On' : 'Off'
   const numMeta = meta
   const displayVal = (value as number) * numMeta.displayMultiplier

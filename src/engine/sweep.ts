@@ -5,6 +5,7 @@ import type {
   SweepParameterDef,
   NumericSweepRange,
   StrategySweepRange,
+  SummaryGrowthSweepRange,
 } from './sweep-types'
 import { PARAM_META, getConversationShapeKeys } from './sweep-defaults'
 
@@ -38,6 +39,9 @@ export function expandParamValues(key: keyof SimulationConfig, def: SweepParamet
   const meta = PARAM_META[key]
   if (meta.paramKind === 'strategy') {
     return (def as StrategySweepRange).values
+  }
+  if (meta.paramKind === 'summaryGrowth') {
+    return (def as SummaryGrowthSweepRange).values
   }
   if (meta.paramKind === 'boolean') {
     return [false, true]
