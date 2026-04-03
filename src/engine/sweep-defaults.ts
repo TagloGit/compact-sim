@@ -13,7 +13,7 @@ export type ParamGroup =
   | 'lossless-retrieval'
   | 'pricing'
 
-export type ParamKind = 'numeric' | 'strategy' | 'boolean'
+export type ParamKind = 'numeric' | 'strategy' | 'boolean' | 'summaryGrowth'
 
 interface BaseParamMeta {
   readonly displayName: string
@@ -44,7 +44,11 @@ export interface BooleanParamMeta extends BaseParamMeta {
   readonly paramKind: 'boolean'
 }
 
-export type ParamMeta = NumericParamMeta | StrategyParamMeta | BooleanParamMeta
+export interface SummaryGrowthParamMeta extends BaseParamMeta {
+  readonly paramKind: 'summaryGrowth'
+}
+
+export type ParamMeta = NumericParamMeta | StrategyParamMeta | BooleanParamMeta | SummaryGrowthParamMeta
 
 export type ParamMetaRegistry = {
   readonly [K in keyof SimulationConfig]: ParamMeta
@@ -230,6 +234,28 @@ export const PARAM_META: ParamMetaRegistry = {
     defaultSweepMin: 0.5,
     defaultSweepMax: 1.0,
     defaultSweepSteps: 6,
+    defaultSweepScale: 'linear',
+  },
+
+  // Summary growth
+  summaryGrowthModel: {
+    paramKind: 'summaryGrowth',
+    displayName: 'Summary growth model',
+    group: 'incremental',
+    isConversationShape: false,
+  },
+  summaryGrowthCoefficient: {
+    paramKind: 'numeric',
+    displayName: 'Summary growth coefficient',
+    group: 'incremental',
+    isConversationShape: false,
+    uiMin: 100,
+    uiMax: 5_000,
+    uiStep: 100,
+    displayMultiplier: 1,
+    defaultSweepMin: 500,
+    defaultSweepMax: 3_000,
+    defaultSweepSteps: 5,
     defaultSweepScale: 'linear',
   },
 

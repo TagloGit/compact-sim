@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { ChevronDown } from 'lucide-react'
-import type { SimulationConfig } from '@/engine/types'
-import type { StrategyType } from '@/engine/types'
+import type { SimulationConfig, StrategyType, SummaryGrowthModel } from '@/engine/types'
 import { PARAM_META, type NumericParamMeta } from '@/engine/sweep-defaults'
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible'
 import { Label } from '@/components/ui/label'
@@ -212,6 +211,46 @@ function StrategySelect({ value, onChange }: StrategySelectProps) {
   )
 }
 
+// --- Summary growth model select (deferred update) ---
+
+interface SummaryGrowthSelectProps {
+  value: SummaryGrowthModel
+  onChange: (value: SummaryGrowthModel) => void
+}
+
+function SummaryGrowthSelect({ value, onChange }: SummaryGrowthSelectProps) {
+  const [local, setLocal] = useState(value)
+
+  useEffect(() => {
+    setLocal(value)
+  }, [value])
+
+  const handleChange = useCallback(
+    (v: string | null) => {
+      if (v === null) return
+      const typed = v as SummaryGrowthModel
+      setLocal(typed)
+      setTimeout(() => onChange(typed), 0)
+    },
+    [onChange],
+  )
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">Summary growth model</Label>
+      <Select value={local} onValueChange={handleChange}>
+        <SelectTrigger className="h-8 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="fixed" className="text-xs">Fixed (convergent)</SelectItem>
+          <SelectItem value="logarithmic" className="text-xs">Logarithmic growth</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
 // --- Deferred switch ---
 
 interface DeferredSwitchProps {
@@ -374,6 +413,13 @@ export function ParameterPanel({ config, onUpdate }: ParameterPanelProps) {
             {slider('contextWindow')}
             {slider('compactionThreshold')}
             {slider('compressionRatio')}
+
+            <SummaryGrowthSelect
+              value={config.summaryGrowthModel}
+              onChange={(v) => onUpdate('summaryGrowthModel', v)}
+            />
+            {config.summaryGrowthModel === 'logarithmic' && slider('summaryGrowthCoefficient')}
+
             {numberInput('cacheReliability')}
           </div>
         </CollapsibleContent>
