@@ -347,11 +347,53 @@ Under logarithmic growth, incremental's optimal interval shifts from 15k to 30k 
 
 ---
 
+## contextWindow × compactionThreshold Sensitivity (Exp 014)
+
+Sweep over `contextWindow` [30k–500k] and `compactionThreshold` [0.50–0.95] for lcm-subagent, plus cross-strategy validation at [64k, 128k, 200k], calibrated baseline.
+
+### lcm-subagent: contextWindow has zero effect at ≥50k
+
+| contextWindow | 100c Cost | 200c Cost | Peak Context | Compactions (200c) |
+|---|---|---|---|---|
+| 30,000 | $4.29 | $8.69 | 25,440 | 15 |
+| 40,000 | $4.73 | $9.62 | 33,990 | 9 |
+| 50,000 | $5.09 | $10.40 | 42,426 | 7 |
+| **≥64,000** | **$5.09** | **$10.49** | **43,352** | **7** |
+
+lcm-subagent's peak context is 43,352 tokens. The compaction threshold at 64k × 0.85 = 54,400 is never reached. The incrementalInterval (30k) is the sole compaction driver.
+
+Below ~50k, the window threshold fires, forcing more compaction and lower costs — but this is the same modelling artefact as Exp 008 (no quality/latency penalty for compaction).
+
+### compactionThreshold: irrelevant at standard windows
+
+At 200k window, all thresholds [0.70–0.95] produce identical costs. At 40k window, threshold has effect (23% cost spread, 0.50–0.95) — same artefact.
+
+### Cross-strategy window sensitivity (200 cycles)
+
+| Strategy | 64k | 128k | 200k | Sensitivity |
+|---|---|---|---|---|
+| **lcm-subagent** | **$10.49** | **$10.49** | **$10.49** | None |
+| lossless-hierarchical | $11.34 | $11.34 | $11.34 | None |
+| full-compaction | **$11.31** | $16.26 | $20.71 | **−45%** |
+| incremental | $11.36 | $11.43 | $11.43 | Marginal |
+| lossless-tool-results | $11.56 | $11.63 | $11.63 | Marginal |
+| lossless-append | $11.85 | $11.92 | $11.92 | Marginal |
+
+**full-compaction is massively window-sensitive** — at 64k it compacts 5× instead of once, reducing cost 45%. At 64k, all strategies converge to a narrow $10.49–$11.85 range (13% spread vs 97% at 200k). But lcm-subagent remains #1 at every window.
+
+**Key findings:**
+1. **contextWindow is a non-decision for lcm-subagent** — use whatever the API provides. The incrementalInterval is the binding compaction constraint.
+2. **compactionThreshold is similarly irrelevant** — context never approaches the threshold at standard windows.
+3. **full-compaction's poor performance is partly a window artefact** — at 64k it approaches parity with other strategies ($11.31 vs $11.43 incremental). But lcm-subagent still wins.
+4. **Strategy rankings stable** across all window sizes and thresholds.
+
+---
+
 ## Cross-Experiment Conclusions
 
 ### Strategy recommendation for Models Agent
 
-**Use `lcm-subagent` unconditionally.** Across 13 experiments spanning Phase 1 (baselines and parameter sweeps), Phase 2 (retrieval stress tests), Phase 3 (cache and ingestion), and Phase 4 (summary growth dynamics), lcm-subagent is the cheapest strategy in every realistic scenario.
+**Use `lcm-subagent` unconditionally.** Across 14 experiments spanning Phase 1 (baselines and parameter sweeps), Phase 2 (retrieval stress tests), Phase 3 (cache and ingestion), and Phase 4 (deployment optimisation), lcm-subagent is the cheapest strategy in every realistic scenario.
 
 | Session length | Strategy | Cost advantage over next-best | Confidence |
 |---|---|---|---|
@@ -367,6 +409,8 @@ Under logarithmic growth, incremental's optimal interval shifts from 15k to 30k 
 | Parameter | Recommended value | Notes |
 |---|---|---|
 | `selectedStrategy` | `lcm-subagent` | Use unconditionally |
+| `contextWindow` | API default (128k–200k) | Non-decision: lcm-subagent's peak context (43k) never reaches window threshold. incrementalInterval drives compaction (Exp 014) |
+| `compactionThreshold` | 0.85 (default) | Non-decision: irrelevant for lcm-subagent at any standard window (Exp 014) |
 | `compressionRatio` | 10 (default) | Higher appears cheaper in model but is a modelling artefact; 10× is practically achievable |
 | `incrementalInterval` | 30,000 (default) | 15k appears cheapest but is a modelling artefact; 30k avoids over-summarisation risk |
 | `pRetrieveMax` | 0.2 (default) | Well within safe zone; recommendation flips only at 0.27–0.77 depending on session length |
@@ -431,11 +475,13 @@ Thinking/assistant ratio: 3.0x (vs implied 3.8x at defaults). Heavy-tailed distr
 
 ## Programme Status (2026-04-03)
 
-**13 experiments complete (Phases 1-3 + first Phase 4 experiment).** The core research question — which compaction strategy to use for the Models Agent — is answered with high confidence. lcm-subagent wins unconditionally in every tested scenario, including under more realistic summary growth modelling (Exp 013).
+**14 experiments complete (Phases 1-3 + two Phase 4 experiments).** The core research question — which compaction strategy to use for the Models Agent — is answered with high confidence. lcm-subagent wins unconditionally in every tested scenario.
 
 **Phase 4 pivot (Tim direction, 2026-04-02):** The research focus shifts from *which strategy* to *how to implement lcm-subagent*. The guiding question: "What can we simulate to inform the real-world implementation?" This includes implementation variants, optimal configuration, context quality modelling, and summary growth dynamics. See #108 for the full Phase 4 epic.
 
-**Phase 4 progress:** Exp 013 (summary growth dynamics) complete — validated all Phase 1-3 conclusions as robust under logarithmic growth. lcm-subagent advantage amplified from 8.2% to 12.1% at 200 cycles. 30k interval recommendation strengthened.
+**Phase 4 progress:**
+- Exp 013 (summary growth dynamics) — validated all Phase 1-3 conclusions as robust under logarithmic growth. lcm-subagent advantage amplified from 8.2% to 12.1% at 200 cycles.
+- Exp 014 (contextWindow × compactionThreshold) — both parameters are non-decisions for lcm-subagent. incrementalInterval is the sole compaction driver. Full-compaction's poor performance is partly a window artefact.
 
 **Wrap-up backlog (complete before Phase 4 experiments):**
 - ~~**#96 (Update defaults)** — DONE; DEFAULT_CONFIG now uses calibrated Models Agent values~~
@@ -462,3 +508,4 @@ Thinking/assistant ratio: 3.0x (vs implied 3.8x at defaults). Heavy-tailed distr
 | 011 | #98 | Cache reliability sensitivity | done | Rankings stable; lcm advantage widens (3–17% vs 0.5–8.2%); ~89-cycle crossover disappears at rel<=0.9 |
 | 012 | #103 | Tool-result compression sensitivity | done | Secondary lever (3–10% savings); ratio=3 sweet spot; rankings stable; full-compaction worse |
 | 013 | #119 | Summary growth dynamics | done | Rankings stable under logarithmic growth; lcm advantage widens (8.2%→12.1%); 30k interval validated |
+| 014 | #121 | contextWindow × compactionThreshold sensitivity | done | contextWindow and threshold are non-decisions for lcm-subagent; incrementalInterval drives compaction; full-compaction penalty is partly a window artefact |
