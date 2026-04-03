@@ -16,14 +16,18 @@ Derived from 7 real Models Agent reference conversations (XML format, `experimen
 | `assistantMessageSize` | ~130 tokens avg | Mean 128, range 7–2,986 |
 | `userMessageSize` | ~60 tokens avg | Mean 56, range 2–470 |
 | `userMessageFrequency` | ~12 tool calls/user turn | Mean 11.5 across sessions |
+| `reasoningOutputSize` | ~265 tokens avg | Mean 265, median 113, P75 313, P90 566 (15 reasoning-on conversations) |
+| `reasoningFrequency` | 0.47 | 47% of assistant turns include thinking blocks |
 
-**Canonical calibrated config** (used as baseline from Exp 003 onward):
+**Canonical calibrated config** (used as baseline from Exp 003 onward, reasoning calibrated in #94):
 ```json
 {
   "toolCallCycles": 200,
   "toolCallSize": 75,
   "toolResultSize": 380,
   "assistantMessageSize": 130,
+  "reasoningOutputSize": 265,
+  "reasoningFrequency": 0.47,
   "userMessageFrequency": 12,
   "userMessageSize": 60,
   "systemPromptSize": 10000
@@ -31,6 +35,8 @@ Derived from 7 real Models Agent reference conversations (XML format, `experimen
 ```
 
 Token estimation methodology: 1 token ≈ 4 characters (from calibration script).
+
+**Note on reasoning calibration (#94):** Prior experiments (001–014) used `reasoningOutputSize: 500` with reasoning on every turn (frequency 1.0). This overcharged reasoning output by ~3-4x. All absolute cost numbers from prior experiments are overstated, but **strategy rankings and relative comparisons remain valid** since reasoning affects all strategies equally.
 
 ---
 
